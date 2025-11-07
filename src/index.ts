@@ -2,11 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import path from 'path';
+import config from 'config';
 
 
 import mongoConnection from './mongo-connection';
-import { videoRoutes } from './routes/videos.api';
-import { SERVER_PORT } from './server.settings';
+import { routeVideos } from './routes/videos.api';
 
 const app = express();
 
@@ -22,8 +22,8 @@ mongoConnection.then(() => {
   console.error('MongoDB connection error:', err);
 });
 
-app.use(videoRoutes);
+app.use(routeVideos);
 
-app.listen(SERVER_PORT, () => {
-  console.log(`Server running on port ${SERVER_PORT}`);
+app.listen(config.get("port"), () => {
+  console.log(`Server running on port ${config.get("port")}`);
 });

@@ -1,7 +1,9 @@
 import mongoose from 'mongoose';
-import { MONGO_URI } from './server.settings';
+import config from 'config';
 
-const mongoConnection = mongoose.connect(MONGO_URI, {
+const uri: string = config.get("mongo");
+
+const mongoConnection = mongoose.connect(uri, {
 }).then(() => {
   console.log('Connesso a MongoDB');
 }).catch((err) => {
