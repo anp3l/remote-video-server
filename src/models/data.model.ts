@@ -3,6 +3,11 @@ import mongoose, { Schema, Model, Document } from "mongoose";
 export interface IFile extends Document {
   fieldname: string;
   originalname: string;
+  title?: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  duration: number;
   encoding?: string;
   mimetype?: string;
   size?: string;
@@ -25,6 +30,25 @@ export var fileSchema: any = new Schema({
   },
   originalname: {
     type: String,
+  },
+  title: { 
+    type: String, 
+    default: "" 
+  },
+  description: { 
+    type: String, 
+    default: "" 
+  },
+  category: { 
+    type: String, 
+    default: "" 
+  },
+  tags: { 
+    type: [String], 
+    default: [] 
+  },
+  duration: {
+    type: Number,
   },
   encoding: {
     type: String,
