@@ -20,15 +20,15 @@ The backend uses a JSON configuration file located in the `config` folder with t
 {
   "port": 3070,
   "mongo": "mongodb://127.0.0.1:27017/videoLibrary",
-  "alloweVideoTypes": "mp4|mov|avi",
-  "alloweThumbTypes": "jpg|jpeg|png|webp"
+  "allowedVideoTypes": "mp4|mov|avi",
+  "allowedThumbTypes": "jpg|jpeg|png|webp"
 }
 ```
 
 - `port`: Server port (default: 3070)
 - `mongo`: MongoDB connection URI
-- `alloweVideoTypes`: Allowed video file types for upload (pipe-separated)
-- `alloweThumbTypes`: Allowed image file types for thumbnails
+- `allowedVideoTypes`: Allowed video file types for upload (pipe-separated)
+- `allowedThumbTypes`: Allowed image file types for thumbnails
 
 ## Prerequisites
 - Node.js (recommended version 16 or higher)

@@ -8,6 +8,7 @@ import {
   makeMulterUploadMiddleware,
   uploadThumb,
   uploadVideo,
+  uploadVideoWithThumb
 } from "../server.settings";
 /*import { isUserAuthenticated } from "../middleware/authentications";*/
 import * as videoUtils from "../videoUtils";
@@ -19,28 +20,56 @@ routeVideos.post(
   "/videos",
   [
     //isUserAuthenticated,
-    makeMulterUploadMiddleware(uploadVideo.array("videos", 10)),
+    makeMulterUploadMiddleware(
+      uploadVideoWithThumb.fields([
+        { name: 'videos', maxCount: 1 },
+        { name: 'thumbnail', maxCount: 1 }
+      ])
+    ),
   ],
-  async (req, res) => {
+  async (req, res,next) => {
+
     const userId = res.locals.member_id;
 
-    const videos = (req.files as MulterFile[]) || [];
+    const files = req.files as { [key: string]: MulterFile[] } | undefined;
+    
+    if (!files) {
+      return res.status(400).json({ error: "No files received" });
+    }
+
+    const videos = files.videos || [];
+    const thumbnailFile = files.thumbnail?.[0];
+
+    if (thumbnailFile && thumbnailFile.size > 5 * 1024 * 1024) {
+      fs.unlinkSync(thumbnailFile.path);
+      return res.status(413).json({ 
+        error: "Thumbnail troppo grande",
+        message: "La thumbnail deve essere massimo 5 MB" 
+      });
+    }
+
     if (videos.length === 0)
       return res.status(400).json({ error: "No file uploaded" });
 
+    const { title, description, tags, category } = req.body;
+    const parsedTags = tags ? (Array.isArray(tags) ? tags : JSON.parse(tags)) : [];
+    
     // Build initial fileObj with videoStatus set to "inProgress"
     let data = videos.map((file) => ({
       ...file,
       userId: userId,
       videoStatus: "inProgress",
+      title: title || "",
+      description: description || "",
+      tags: parsedTags,
+      category: category || "",
     }));
 
     try {
       const docs = await File.insertMany(data);
-
       // Fire-and-forget async processing
       docs.forEach((doc) => {
-        videoUtils.createVideo(doc).catch((err) => {
+        videoUtils.createVideo(doc, thumbnailFile?.path).catch((err) => {
           console.error("Video processing failed:", err);
         });
       });
@@ -56,6 +85,7 @@ routeVideos.post(
         insertedCount: docs.length,
       });
     } catch (e) {
+      console.error('MongoDB insert error:', e);
       res.status(400).json({ error: "Insert failed", details: e });
     }
   }
@@ -96,6 +126,37 @@ routeVideos.patch(
     } catch (err) {
       console.error("Error saving custom thumbnail:", err);
       res.status(500).json({ error: "Failed to save custom thumbnail" });
+    }
+  }
+);
+// PATCH /videos/:id - Update video metadata
+routeVideos.patch(
+  "/videos/:id",
+  async (req, res) => {
+    const { id } = req.params;
+    const { title, description, tags, category } = req.body;
+
+    try {
+      const updates: any = {};
+      if (title !== undefined) updates.title = title;
+      if (description !== undefined) updates.description = description;
+      if (category !== undefined) updates.category = category;
+      if (tags !== undefined) updates.tags = tags;
+
+      const updatedVideo = await File.findByIdAndUpdate(
+        id,
+        { $set: updates },
+        { new: true, runValidators: true }
+      );
+
+      if (!updatedVideo) {
+        return res.status(404).json({ error: "Video non trovato" });
+      }
+
+      res.json(updatedVideo);
+    } catch (error) {
+      console.error("Errore aggiornamento video:", error);
+      res.status(500).json({ error: "Errore durante l'aggiornamento" });
     }
   }
 );
@@ -312,25 +373,27 @@ routeVideos.get("/videos/user", /*isUserAuthenticated,*/ async (req, res) => {
   }
 });
 
-// GET /videos/list - List all public videos
-routeVideos.get("/videos/list", async (_req, res) => {
+// GET /videos - List all videos
+routeVideos.get("/videos", async (req, res) => {
   try {
-    const videos = await File.find({ mimetype: { $regex: "videos" }, status: "Public" });
+    const videos = await File.find({ mimetype: { $regex: "video" } });
 
     const result = videos.map((file) => ({
-      _id: file._id,
-      filename: `${file._id}.mp4`,
-      size: file.size,
-      videoStatus: file.videoStatus,
-      static_thumbnail: `/videos/thumb/static/${file._id}`,
-      animated_thumbnail: `/videos/thumb/animated/${file._id}`,
-      hls_stream: `/videos/stream/${file._id}`,
-      createdAt: file.createdAt,
+      id: file._id,
+      title: file.title || file.originalname,
+      description: file.description || '',
+      thumbnail:`/videos/thumb/static/${file._id}`,
+      videoUrl: `/videos/stream/${file._id}`,
+      duration: file.duration,
+      uploadDate: file.createdAt,
+      size: file.size || '0',
+      category: file.category || 'Uncategorized',
+      tags: file.tags || []
     }));
 
     res.json(result);
   } catch (e) {
-    res.status(500).json({ error: "Error fetching video list" });
+    res.status(500).json({ error: "Error fetching videos" });
   }
 });
 
