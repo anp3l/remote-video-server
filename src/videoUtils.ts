@@ -16,7 +16,7 @@ const ffmpeg = require("fluent-ffmpeg");
  */
 export const videoFileFilter = function (req, file, cb) {
   // Obtain the allowed file types
-  const extensions: string = config.get("alloweVideoTypes");
+  const extensions: string = config.get("allowedVideoTypes");
 
   // Convert the string of extensions into an array
   const allowedExtensions = extensions.split("|");
@@ -37,7 +37,7 @@ export const videoFileFilter = function (req, file, cb) {
 
 export const thumbFileFilter = function (req, file, cb) {
   // Obtain the allowed file types
-  const extensions: string = config.get("alloweThumbTypes");
+  const extensions: string = config.get("allowedThumbTypes");
 
   // Convert the string of extensions into an array
   const allowedExtensions = extensions.split("|");
@@ -57,7 +57,7 @@ export const thumbFileFilter = function (req, file, cb) {
   cb(null, true);
 };
 
-export const createVideo = async (fileObj) => {
+export const createVideo = async (fileObj, customThumbnailPath?: string) => {
   const id = fileObj._id.toString();
   const inputPath = path.join(VIDEO_PATH, fileObj.filename);
   const videoFolderPath = path.join(VIDEO_PATH, id);
@@ -79,6 +79,8 @@ export const createVideo = async (fileObj) => {
       return;
     }
 
+    const duration = await getVideoDuration(inputPath);
+
     // 2. Ensure folder exists
     if (!fs.existsSync(videoFolderPath)) {
       fs.mkdirSync(videoFolderPath, { recursive: true });
@@ -90,24 +92,32 @@ export const createVideo = async (fileObj) => {
     const animatedThumbPath = path.join(videoFolderPath, `${id}_animated.webp`);
     const compressedVideoPath = path.join(videoFolderPath, `${id}_compressed.mp4`);
     const jpegFramePath = path.join(videoFolderPath, `thumb.jpg`);
+    const customThumbPath = path.join(videoFolderPath, `${id}_custom.webp`);
 
     // === STATIC THUMBNAIL ===
-    if (!folderExistsOrExit()) return;
-    // Generate static thumbnail (JPEG → WebP)
-    await new Promise<void>((resolve, reject) => {
-      ffmpeg(inputPath)
-        .outputOptions(["-frames:v 1"])
-        .seekInput(4) // <- Seek to the X second
-        .output(jpegFramePath)
-        .on("end", resolve)
-        .on("error", reject)
-        .run();
-    });
-    if (!folderExistsOrExit()) return;
-    const jpegBuffer = await fs.promises.readFile(jpegFramePath);
-    await sharp(jpegBuffer).webp().toFile(staticThumbPath);
-    await fs.promises.unlink(jpegFramePath);
-    
+    if (customThumbnailPath && fs.existsSync(customThumbnailPath)) {
+      await sharp(customThumbnailPath).webp().toFile(customThumbPath);
+      fs.unlinkSync(customThumbnailPath); // Rimuovi il file temporaneo
+    }
+
+    if (!customThumbnailPath) {
+      if (!folderExistsOrExit()) return;
+      // Generate static thumbnail (JPEG → WebP)
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(inputPath)
+          .outputOptions(["-frames:v 1"])
+          .seekInput(4) // <- Seek to the X second
+          .output(jpegFramePath)
+          .on("end", resolve)
+          .on("error", reject)
+          .run();
+      });
+      if (!folderExistsOrExit()) return;
+      const jpegBuffer = await fs.promises.readFile(jpegFramePath);
+      await sharp(jpegBuffer).webp().toFile(staticThumbPath);
+      await fs.promises.unlink(jpegFramePath);
+    }
+
     // === HLS CONVERSION ===
     // Convert to HLS (only if not already exists)
     if (!folderExistsOrExit()) return;
@@ -174,13 +184,21 @@ export const createVideo = async (fileObj) => {
 
     // Update the database if the video still exists
     if (await File.exists({ _id: id })) {
-      await File.findByIdAndUpdate(id, {
+      const updateData: any = {
         hls: `${id}.m3u8`,
         static_thumbnail: `${id}.webp`,
         animated_thumbnail: `${id}_animated.webp`,
         compressed_video: `${id}_compressed.mp4`,
+        duration: duration,
         videoStatus: "uploaded",
-      });
+      };
+      
+      // Aggiungi custom_thumbnail se presente
+      if (customThumbnailPath) {
+        updateData.custom_thumbnail = `${id}_custom.webp`;
+      }
+      
+      await File.findByIdAndUpdate(id, updateData);
     }
 
   } catch (err) {
@@ -217,4 +235,16 @@ export const createCustomThumbnail = async (
     console.error("Error creating custom thumbnail:", err);
     throw err; 
   }
+};
+
+const getVideoDuration = (filePath: string): Promise<number> => {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(filePath, (error, metadata) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(metadata.format.duration || 0);
+      }
+    });
+  });
 };
