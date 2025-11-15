@@ -21,7 +21,7 @@ export interface IFile extends Document {
   custom_thumbnail?: string;
   animated_thumbnail?: string; 
   hls?: string; 
-  compressed_video?: string; 
+  original_video?: string; 
 }
 
 export var fileSchema: any = new Schema({
@@ -90,7 +90,7 @@ export var fileSchema: any = new Schema({
   hls: {
     type: String,
   },
-  compressed_video: {
+  original_video: {
     type: String,
   },
 });

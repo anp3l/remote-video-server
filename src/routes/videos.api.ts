@@ -254,43 +254,55 @@ routeVideos.get("/videos/thumb/animated/:id", async (req, res) => {
   fs.createReadStream(animatedPath).pipe(res);
 });
 
-// GET /videos/download/:id - Download the compressed video file
+// GET /videos/download/:id - Download 
 routeVideos.get("/videos/download/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    const file = await File.findById(id);
-
-
-    if (!file) {
-      return res.status(404).json({ error: "Video not found" });
+    const video = await File.findById(id);
+    if (!video || !video.original_video) {
+      return res.status(404).json({ error: "Video non trovato" });
     }
 
-    if (file.videoStatus !== "uploaded") {
-      return res.status(423).json({ error: "Video processing not completed yet" });
-    }
-
-    if (!file.compressed_video) {
-      return res.status(500).json({ error: "Compressed video missing unexpectedly" });
-    }
-
-    const videoPath = path.join(VIDEO_PATH, id, file.compressed_video);
-
+    const videoPath = path.join(VIDEO_PATH, id, video.original_video);
+    
     if (!fs.existsSync(videoPath)) {
-      return res.status(404).json({ error: "Video file not found" });
+      return res.status(404).json({ error: "File video non trovato" });
     }
 
-    // Set appropriate headers for download
-    res.setHeader("Content-Type", "video/mp4");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="video.mp4"; filename*=UTF-8''${encodeURIComponent(file.originalname)}`
-    );
+    const stat = fs.statSync(videoPath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
 
-    // Stream the file
-    fs.createReadStream(videoPath).pipe(res);
-  } catch (e) {
-    res.status(500).json({ error: "Error downloading video", details: e });
+    // Support range requests per video grandi
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = (end - start) + 1;
+      const file = fs.createReadStream(videoPath, { start, end });
+      
+      res.writeHead(206, {
+        "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+        "Accept-Ranges": "bytes",
+        "Content-Length": chunksize,
+        "Content-Type": "video/mp4",
+        "Content-Disposition": `attachment; filename="${video.title}${path.extname(video.original_video)}"`
+      });
+      
+      file.pipe(res);
+    } else {
+      res.writeHead(200, {
+        "Content-Length": fileSize,
+        "Content-Type": "video/mp4",
+        "Content-Disposition": `attachment; filename="${video.title}${path.extname(video.original_video)}"`
+      });
+      
+      fs.createReadStream(videoPath).pipe(res);
+    }
+  } catch (error) {
+    console.error("Errore download:", error);
+    res.status(500).json({ error: "Errore durante il download" });
   }
 });
 
@@ -322,7 +334,7 @@ routeVideos.get("/videos/:id", async (req, res) => {
       hls_path: file.hls,
       static_thumbnail: file.static_thumbnail,
       animated_thumbnail: file.animated_thumbnail,
-      compressed_video: file.compressed_video,
+      original_video: file.original_video,
       custom_thumbnail: file.custom_thumbnail,
     });
   } catch (err) {

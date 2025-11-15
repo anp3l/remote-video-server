@@ -62,6 +62,8 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
   const inputPath = path.join(VIDEO_PATH, fileObj.filename);
   const videoFolderPath = path.join(VIDEO_PATH, id);
 
+  const originalVideoPath = path.join(videoFolderPath, `${id}_original${path.extname(fileObj.filename)}`);
+
   // Folder controll helper 
   const folderExistsOrExit = () => {
     if (!fs.existsSync(videoFolderPath)) {
@@ -90,7 +92,6 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
     const hlsPath = path.join(videoFolderPath, `${id}.m3u8`);
     const staticThumbPath = path.join(videoFolderPath, `${id}.webp`);
     const animatedThumbPath = path.join(videoFolderPath, `${id}_animated.webp`);
-    const compressedVideoPath = path.join(videoFolderPath, `${id}_compressed.mp4`);
     const jpegFramePath = path.join(videoFolderPath, `thumb.jpg`);
     const customThumbPath = path.join(videoFolderPath, `${id}_custom.webp`);
 
@@ -161,26 +162,6 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
           .run();
       });
     }
-    // === COMPRESSED VIDEO ===
-    // Generate compressed video
-    if (!folderExistsOrExit()) return;
-    if (!fs.existsSync(compressedVideoPath)) {
-      await new Promise<void>((resolve, reject) => {
-        ffmpeg(inputPath)
-          .outputOptions([
-            "-preset veryfast",
-            "-crf 28",
-            "-vf", "scale='if(gt(iw,1280),1280,iw)':'if(gt(ih,720),720,ih)'",
-            "-c:v libx264",
-            "-pix_fmt yuv420p",
-            "-movflags +faststart"
-          ])
-          .output(compressedVideoPath)
-          .on("end", resolve)
-          .on("error", reject)
-          .run();
-      });
-    }
 
     // Update the database if the video still exists
     if (await File.exists({ _id: id })) {
@@ -188,7 +169,7 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
         hls: `${id}.m3u8`,
         static_thumbnail: `${id}.webp`,
         animated_thumbnail: `${id}_animated.webp`,
-        compressed_video: `${id}_compressed.mp4`,
+         original_video: `${id}_original${path.extname(fileObj.filename)}`,
         duration: duration,
         videoStatus: "uploaded",
       };
@@ -205,9 +186,9 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
     console.error(`[createVideo] Error processing video ${id}:`, err);
     await File.findByIdAndUpdate(id, { videoStatus: "error" });
   } finally {
-    // Remove always the input file if exists
+    // Move the original file to the video folder
     if (fs.existsSync(inputPath)) {
-      await fs.promises.unlink(inputPath).catch(() => {});
+      await fs.promises.rename(inputPath, originalVideoPath).catch(() => {});
     }
   }
 };
