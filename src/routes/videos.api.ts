@@ -349,6 +349,26 @@ routeVideos.get("/videos/status/:id", async (req, res) => {
   }
 });
 
+// GET /videos/duration/:id - Get video duration
+routeVideos.get("/videos/duration/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Prendi solo il campo duration dal documento
+    const file = await File.findById(id).select('duration');
+    if (!file) {
+      return res.status(404).json({ error: "Video not found" });
+    }
+
+    // Rispondi con la durata (es. in secondi)
+    res.json(file.duration);
+  } catch (err) {
+    console.error("Error retrieving video duration:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
 // GET /videos/user - List all videos for current user
 routeVideos.get("/videos/user", /*isUserAuthenticated,*/ async (req, res) => {
   const userId = res.locals.member_id;
@@ -379,7 +399,7 @@ routeVideos.get("/videos", async (req, res) => {
     const videos = await File.find({ mimetype: { $regex: "video" } });
 
     const result = videos.map((file) => ({
-      id: file._id,
+      _id: file._id,
       title: file.title || file.originalname,
       description: file.description || '',
       thumbnail:`/videos/thumb/static/${file._id}`,

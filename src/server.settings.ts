@@ -7,13 +7,13 @@ export const VIDEO_PATH = "uploads/videos";
 export const uploadVideo = multer({
   dest: `${VIDEO_PATH}/`,
   fileFilter: videoUtils.videoFileFilter,
-  limits: { fileSize: 100 * 1024 * 1024 }, // limit up to 100 mb
+  limits: { fileSize: 500 * 1024 * 1024 }, // limit up to 100 mb
 });
 
 export const uploadThumb = multer({
   dest: `${VIDEO_PATH}/`,
   fileFilter: videoUtils.thumbFileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // limit up to 5 mb
+  limits: { fileSize: 500 * 1024 * 1024 }, // limit up to 5 mb
 })
 
 export const uploadVideoWithThumb = multer({
@@ -27,7 +27,7 @@ export const uploadVideoWithThumb = multer({
       cb(new Error('Unexpected field name: ' + file.fieldname));
     }
   },
-  limits: { fileSize: 100 * 1024 * 1024 },
+  limits: { fileSize: 500 * 1024 * 1024 },
 });
 
 export function makeMulterUploadMiddleware(multerUploadFunction) {
