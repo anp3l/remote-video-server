@@ -5,9 +5,9 @@ const uri: string = config.get("mongo");
 
 const mongoConnection = mongoose.connect(uri, {
 }).then(() => {
-  console.log('Connesso a MongoDB');
+  console.log('Connected to MongoDB');
 }).catch((err) => {
-  console.error('Errore connessione MongoDB:', err);
+  console.error('Connection error to MongoDB:', err);
 });
 
 export default mongoConnection;
