@@ -8,8 +8,9 @@ import {
   uploadThumb,
   uploadVideoWithThumb
 } from "../server.settings";
-import { verifyToken, AuthRequest } from "../middleware/auth.middleware";
-import * as videoUtils from "../videoUtils";
+import { verifyToken, AuthRequest, verifySignedUrl } from "../middleware/auth.middleware";
+import * as videoUtils from '../utils/videoUtils';
+import { generateSignedUrl } from '../utils/signedUrl';
 
 type MulterFile = Express.Multer.File;
 
@@ -518,7 +519,7 @@ routeVideos.patch(
  */
 routeVideos.get(
   "/videos/stream/:id/:file?",
-  verifyToken,
+  verifySignedUrl,
   async (req: AuthRequest, res) => {
     const { id, file } = req.params;
     const userId = req.userId;
@@ -568,11 +569,141 @@ routeVideos.get(
   }
 );
 
+/**
+ * @swagger
+ * /videos/thumb/signed/{id}:
+ *   get:
+ *     summary: Serve static thumbnail via signed URL
+ *     description: Returns the static thumbnail in WebP format using signed URL authentication. This endpoint is used by the video player and requires signature, expiration, and user ID query parameters. Priority - 1) Custom thumbnail (if uploaded), 2) Automatically generated thumbnail.
+ *     tags: [Videos]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: MongoDB ID of the video
+ *         example: "507f1f77bcf86cd799439011"
+ *       - in: query
+ *         name: expires
+ *         required: true
+ *         schema:
+ *           type: number
+ *         description: Unix timestamp when the URL expires
+ *         example: 1700000000000
+ *       - in: query
+ *         name: signature
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: HMAC-SHA256 signature for URL verification
+ *         example: "a3f5b8c2d1e4f7a9b2c5d8e1f4a7b0c3d6e9f2a5b8c1d4e7f0a3b6c9d2e5f8a1"
+ *       - in: query
+ *         name: uid
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID who generated the signed URL
+ *         example: "507f1f77bcf86cd799439011"
+ *     responses:
+ *       200:
+ *         description: Thumbnail image in WebP format
+ *         content:
+ *           image/webp:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *               description: WebP thumbnail image file (custom or auto-generated)
+ *       401:
+ *         description: Missing or invalid signature parameters
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   enum:
+ *                     - "Missing signature parameters"
+ *                     - "Signed URL expired"
+ *                     - "Invalid signature"
+ *                   example: "Signed URL expired"
+ *       403:
+ *         description: Not authorized to view this video
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Not authorized to view this video"
+ *       404:
+ *         description: Thumbnail not available or file not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   enum:
+ *                     - "Thumbnail not available"
+ *                     - "Thumbnail file not found"
+ *                   example: "Thumbnail not available"
+ *       500:
+ *         description: Internal error - thumbnail unexpectedly missing
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Static thumbnail missing unexpectedly"
+ */
+routeVideos.get(
+  "/videos/thumb/signed/:id",
+  verifySignedUrl,
+  async (req: AuthRequest, res) => {
+    const id = req.params.id;
+    const userId = req.userId;
+    
+    const file = await File.findById(id);
 
+    if (!file || file.videoStatus !== "uploaded") {
+      return res.status(404).json({ error: "Thumbnail not available" });
+    }
+
+    // Check ownership
+    if (file.userId.toString() !== userId) {
+      return res.status(403).json({ error: "Not authorized to view this video" });
+    }
+
+    // Check custom thumbnail exists
+    const customThumbPath = path.join(VIDEO_PATH, id, `${id}_custom.webp`);
+    if (fs.existsSync(customThumbPath)) {
+      res.setHeader("Content-Type", "image/webp");
+      return fs.createReadStream(customThumbPath).pipe(res);
+    }
+
+    if (!file.static_thumbnail) {
+      return res.status(500).json({ error: "Static thumbnail missing unexpectedly" });
+    }
+
+    const defaultThumbPath = path.join(VIDEO_PATH, id, file.static_thumbnail);
+    if (fs.existsSync(defaultThumbPath)) {
+      res.setHeader("Content-Type", "image/webp");
+      return fs.createReadStream(defaultThumbPath).pipe(res);
+    }
+
+    return res.status(404).json({ error: "Thumbnail file not found" });
+  }
+);
 
 /**
  * @swagger
- * /videos/thumb/static/{id}:
+ * /videos/thumb/{id}:
  *   get:
  *     summary: Serve static thumbnail of a video
  *     description: Returns the static thumbnail in WebP format. Priority - 1) Custom thumbnail (if uploaded), 2) Automatically generated thumbnail
@@ -662,7 +793,6 @@ routeVideos.get(
     return res.status(404).json({ error: "Thumbnail file not found" });
   }
 );
-
 
 
 /**
@@ -1525,6 +1655,135 @@ routeVideos.delete(
     } catch (e) {
       console.error("Error deleting video:", e);
       return res.status(500).json({ error: "Error deleting video", details: e });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /videos/{id}/signed-url:
+ *   post:
+ *     summary: Generate signed URLs for secure video streaming
+ *     description: Creates temporary signed URLs (valid for 10 minutes) for HLS video streaming and thumbnail access. The signed URLs use HMAC-SHA256 signatures to prevent unauthorized access and replay attacks. Used by the video player component to securely stream content.
+ *     tags: [Videos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: MongoDB ID of the video
+ *         example: "507f1f77bcf86cd799439011"
+ *     responses:
+ *       200:
+ *         description: Signed URLs generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 streamUrl:
+ *                   type: string
+ *                   description: Signed URL for HLS video streaming (m3u8 playlist)
+ *                   example: "http://localhost:3070/videos/stream/507f1f77bcf86cd799439011/507f1f77bcf86cd799439011.m3u8?expires=1700000000000&signature=a3f5b8c2d1e4f7a9&uid=507f1f77bcf86cd799439011"
+ *                 thumbnailUrl:
+ *                   type: string
+ *                   description: Signed URL for thumbnail access
+ *                   example: "http://localhost:3070/videos/thumb/signed/507f1f77bcf86cd799439011?expires=1700000000000&signature=a3f5b8c2d1e4f7a9&uid=507f1f77bcf86cd799439011"
+ *                 expiresAt:
+ *                   type: number
+ *                   description: Unix timestamp (milliseconds) when the signed URLs expire
+ *                   example: 1700000600000
+ *       401:
+ *         description: Missing or invalid JWT token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Missing token"
+ *       403:
+ *         description: Not authorized to access this video (not the owner)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Not authorized to access this video"
+ *       404:
+ *         description: Video not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Video not found"
+ *       423:
+ *         description: Video processing not completed yet
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Video processing not completed yet"
+ *       500:
+ *         description: Internal server error during signed URL generation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Error generating signed URL"
+ */
+routeVideos.post(
+  "/videos/:id/signed-url",
+  verifyToken,
+  async (req: AuthRequest, res) => {
+    const videoId = req.params.id;
+    const userId = req.userId!;
+
+    try {
+      const fileData = await File.findById(videoId);
+
+      if (!fileData) {
+        return res.status(404).json({ error: "Video not found" });
+      }
+
+      // Check ownership
+      if (fileData.userId.toString() !== userId) {
+        return res.status(403).json({ error: "Not authorized to access this video" });
+      }
+
+      if (fileData.videoStatus !== "uploaded") {
+        return res.status(423).json({ error: "Video processing not completed yet" });
+      }
+
+      // Generate signed URLs
+      const signedParams = generateSignedUrl({ videoId, userId, expiresInMinutes: 10 });
+      
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const streamUrl = `${baseUrl}/videos/stream/${videoId}/${fileData.hls}${signedParams}`;
+      const thumbnailUrl = `${baseUrl}/videos/thumb/signed/${videoId}${signedParams}`;
+
+      res.json({
+        streamUrl,
+        thumbnailUrl,
+        expiresAt: Date.now() + (10 * 60 * 1000)
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Error generating signed URL" });
     }
   }
 );

@@ -2,8 +2,8 @@ import fs from "fs";
 import path from "path";
 import sharp from "sharp";
 import config from "config";
-import { File } from "./models/data.model";
-import { VIDEO_PATH } from "./server.settings";
+import { File } from "../models/data.model";
+import { VIDEO_PATH } from "../server.settings";
 
 const ffmpeg = require("fluent-ffmpeg");
 

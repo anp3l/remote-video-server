@@ -1,4 +1,4 @@
-import * as videoUtils from "./videoUtils";
+import * as videoUtils from './utils/videoUtils';
 import multer from 'multer';
 
 
