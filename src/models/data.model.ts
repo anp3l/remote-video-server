@@ -13,7 +13,7 @@ export interface IFile extends Document {
   size?: string;
   destination?: string;
   filename: string;
-  userId: string;
+  userId: mongoose.Types.ObjectId;
   path?: string;
   createdAt: Date;
   videoStatus?: string; 
@@ -66,7 +66,9 @@ export var fileSchema: any = new Schema({
     type: String,
   },
   userId: {
-    type: String,
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   },
   path: {
     type: String,
