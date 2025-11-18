@@ -4,11 +4,41 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import path from 'path';
 import config from 'config';
-
 import mongoConnection from './mongo-connection';
 import { routeVideos } from './routes/videos.api';
+import authRoutes from './routes/auth.routes';
+import swaggerUi from 'swagger-ui-express';
+import swaggerJsDoc from 'swagger-jsdoc';
 
 const app = express();
+
+const swaggerOptions = {
+  swaggerDefinition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'Video Library API',
+      version: '1.0.0',
+      description: 'API for managing remote video library'
+    },
+    servers: [
+      {
+        url: 'http://localhost:3070'
+      }
+    ],
+    tags: [
+      {
+        name: 'Videos',
+        description: 'Endpoints for video management'
+      }
+    ]
+  },
+  apis: [
+    './src/routes/*.ts',
+    './src/routes/**/*.ts'
+  ]
+};
+
+const swaggerDocs = swaggerJsDoc(swaggerOptions);
 
 // === PROCESS ERROR HANDLERS ===
 process.on('unhandledRejection', (reason, promise) => {
@@ -32,12 +62,18 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
+  explorer: true,
+  customSiteTitle: "Video Library API Docs"
+}));
+
 mongoConnection.then(() => {
   console.log('Connected to MongoDB');
 }).catch((err) => {
   console.error('MongoDB connection error:', err);
 });
 
+app.use('/auth', authRoutes);
 app.use(routeVideos);
 
 // === GLOBAL ERROR HANDLER ===
