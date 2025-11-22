@@ -45,10 +45,24 @@ Or use `/config/config.json` as alternative.
 
 ## API Authentication
 
-Obtain a JWT via `/auth/signup` or `/auth/login`.  
-Add this header to **every** video request:
+There are two ways to authenticate your requests when interacting with the Remote Video Library API:
 
-Authorization: Bearer <token>
+### 1. Using Swagger UI for Authentication
+
+- Open Swagger UI at `/docs`.
+- Use the `/auth/signup` or `/auth/login` endpoint to obtain a JWT token.
+- Click on the [translate:**Authorize**] button (lock icon) in the top-right corner.
+- Enter your JWT token in the format: [translate:`Bearer <your_token>`].
+- Click [translate:**Authorize**] to apply the token globally for all protected endpoints.
+- You can now execute any protected API call directly from Swagger UI without manually adding the token each time.
+
+### 2. Using Direct API Calls
+
+- Obtain the JWT token by calling [translate:`/auth/signup`] or [translate:`/auth/login`] via your client (e.g., Postman, curl, frontend app).
+- Include the JWT token in the Authorization header of each request to protected endpoints:
+
+  
+  Authorization: Bearer <your_token>
 
 ---
 
@@ -59,7 +73,7 @@ Authorization: Bearer <token>
 | POST   | `/auth/signup`                 | Register (username, email, password)   |
 | POST   | `/auth/login`                  | Login (email, password)                |
 | GET    | `/videos`                      | List your videos                       |
-| POST   | `/videos`                      | Upload video(s)                        |
+| POST   | `/videos`                      | Upload video                          |
 | GET    | `/videos/:id`                  | Video details                          |
 | PATCH  | `/videos/:id`                  | Edit metadata                          |
 | DELETE | `/videos/:id`                  | Delete video + assets                  |

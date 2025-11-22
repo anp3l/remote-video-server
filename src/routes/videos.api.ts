@@ -20,8 +20,8 @@ export const routeVideos = express.Router();
  * @swagger
  * /videos:
  *   post:
- *     summary: Upload one or more videos with thumbnail
- *     description: Upload videos with optional thumbnail. The video is processed asynchronously to generate HLS streams, static and animated thumbnails.
+ *     summary: Upload a single video with optional thumbnail
+ *     description: Upload one video with optional thumbnail. The video is processed asynchronously to generate HLS streams, static and animated thumbnails.
  *     tags: [Videos]
  *     security:
  *       - bearerAuth: []
@@ -71,35 +71,33 @@ export const routeVideos = express.Router();
  *                   properties:
  *                     ok:
  *                       type: number
- *                       description: Number of videos uploaded
- *                 ops:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       _id:
+ *                       description: Number of videos uploaded (always 1)
+ *                 op:
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                       description: Video ID
+ *                     title:
+ *                       type: string
+ *                     description:
+ *                       type: string
+ *                     tags:
+ *                       type: array
+ *                       items:
  *                         type: string
- *                         description: Video ID
- *                       title:
- *                         type: string
- *                       description:
- *                         type: string
- *                       tags:
- *                         type: array
- *                         items:
- *                           type: string
- *                       category:
- *                         type: string
- *                       videoStatus:
- *                         type: string
- *                         enum: [processing, uploaded, error]
- *                         description: Video processing status
- *                       permalink:
- *                         type: string
- *                         description: Video permalink URL
+ *                     category:
+ *                       type: string
+ *                     videoStatus:
+ *                       type: string
+ *                       enum: [processing, uploaded, error]
+ *                       description: Video processing status
+ *                     permalink:
+ *                       type: string
+ *                       description: Video permalink URL
  *                 insertedCount:
  *                   type: number
- *                   description: Total number of videos inserted
+ *                   description: Total number of videos inserted (always 1)
  *       400:
  *         description: No files received or insertion error
  *       401:
@@ -119,17 +117,17 @@ routeVideos.post(
     ])
   ),
   async (req: AuthRequest, res, next) => {
-    
+
     const userId = req.userId;
 
     const files = req.files as { [key: string]: MulterFile[] } | undefined;
-    
-    if (!files) {
+
+    if (!files || !files.videos || files.videos.length === 0) {
       return res.status(400).json({ error: "No files received" });
     }
 
-    const videos: MulterFile[] = files?.videos || [];
-    const thumbnailFile: MulterFile | undefined = files?.thumbnail?.[0];
+    const videoFile = files.videos[0];
+    const thumbnailFile = files.thumbnail?.[0];
 
     if (thumbnailFile && thumbnailFile.size > 5 * 1024 * 1024) {
       fs.unlinkSync(thumbnailFile.path);
@@ -138,9 +136,6 @@ routeVideos.post(
         message: "Thumbnail must be maximum 5 MB" 
       });
     }
-
-    if (videos.length === 0)
-      return res.status(400).json({ error: "No file uploaded" });
 
     const { title, description, tags, category } = req.body;
     let parsedTags: string[] = [];
@@ -156,34 +151,33 @@ routeVideos.post(
       }
     }
 
-    let data = videos.map((file) => ({
-      ...file,
+    const data = {
+      ...videoFile,
       userId: userId,
       videoStatus: "inProgress",
       title: title || "",
       description: description || "",
       tags: parsedTags,
       category: category || "",
-    }));
+    };
 
     try {
-      const docs = await File.insertMany(data);
+      const doc = await File.create(data);
       // Fire-and-forget async processing
-      docs.forEach((doc) => {
-        videoUtils.createVideo(doc, thumbnailFile?.path).catch((err) => {
-          console.error("Video processing failed:", err);
-        });
+
+      videoUtils.createVideo(doc, thumbnailFile?.path).catch((err) => {
+        console.error("Video processing failed:", err);
       });
 
-      const ops = docs.map((x) => ({
-        ...x.toObject(),
-        permalink: `https://${req.headers.host}/videos/${x._id}`,
-      }));
+      const op = {
+        ...doc.toObject(),
+        permalink: `https://${req.headers.host}/videos/${doc._id}`,
+      };
 
       res.json({
-        result: { ok: docs.length },
-        ops,
-        insertedCount: docs.length,
+        result: { ok: 1 },
+        op,
+        insertedCount: 1,
       });
     } catch (e) {
       console.error('MongoDB insert error:', e);

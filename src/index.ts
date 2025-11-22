@@ -22,13 +22,32 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: 'http://localhost:3070'
+        url: 'http://localhost:' + config.get("port")
       }
     ],
     tags: [
       {
         name: 'Videos',
         description: 'Endpoints for video management'
+      },
+      {
+        name: 'Auth',
+        description: 'Authentication endpoints'
+      }
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'Enter JWT token in format: Bearer <token>'
+        }
+      }
+    },
+    security: [
+      {
+        bearerAuth: []
       }
     ]
   },

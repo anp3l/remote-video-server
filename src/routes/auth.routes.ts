@@ -12,7 +12,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
  *   post:
  *     summary: Register a new user
  *     description: Create a new user account with unique username and email. Returns a JWT on success.
- *     tags: [Authentication]
+ *     tags: [Auth]
  *     requestBody:
  *       required: true
  *       content:
@@ -130,7 +130,7 @@ router.post('/signup', async (req, res) => {
  *   post:
  *     summary: Authenticate a user and obtain JWT
  *     description: User login with email and password. Returns a JWT on success.
- *     tags: [Authentication]
+ *     tags: [Auth]
  *     requestBody:
  *       required: true
  *       content:
