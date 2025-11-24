@@ -32,11 +32,13 @@ The backend server for the **Remote Video Library** project. Secure, private, an
 
 ### 1. Clone the repository
 
-git clone `https://github.com/andrea-peluso/remote-video-server.git
+git clone https://github.com/andrea-peluso/remote-video-server.git
+
+cd remote-video-server
 
 ### 2. Install dependencies
 
- npm install
+npm install
 
 ### 3. Environment variables
 
