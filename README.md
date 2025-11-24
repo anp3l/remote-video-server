@@ -1,5 +1,7 @@
 # Remote Video Library – Backend
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ## Description
 
 The backend server for the **Remote Video Library** project. Secure, private, and built with Node.js, Express, and MongoDB. Features user authentication with JWT, HLS streaming, video upload, per-user video management, and full REST API.
@@ -20,17 +22,24 @@ The backend server for the **Remote Video Library** project. Secure, private, an
 
 ## Requirements
 
-- Node.js v16 or higher
-- MongoDB instance (local or remote)
+- **Node.js** v16 or higher
+- **MongoDB** instance (local or remote)
 - [ffmpeg](https://ffmpeg.org/) available in your PATH
 
 ---
 
 ## Setup
 
-1. **Clone the repository** `https://github.com/andrea-peluso/remote-video-server.git`
-2. **Install dependencies** `npm install`
-3. **Environment variables** 
+### 1. Clone the repository
+
+git clone `https://github.com/andrea-peluso/remote-video-server.git
+
+### 2. Install dependencies
+
+ npm install
+
+### 3. Environment variables
+
 Create a `.env` file with:
 JWT_SECRET=your-very-secret-key
 PORT=3070
@@ -38,8 +47,13 @@ MONGO_URI=mongodb://127.0.0.1:27017/videoLibrary
 
 Or use `/config/config.json` as alternative.
 
-4. **Start MongoDB**
-5. **Start the server** `npm run dev`
+### 4. Start MongoDB
+
+Start MongoDB locally or connect to a remote instance.
+
+### 5. Run the server
+
+npm run dev
 
 ---
 
@@ -51,14 +65,14 @@ There are two ways to authenticate your requests when interacting with the Remot
 
 - Open Swagger UI at `/docs`.
 - Use the `/auth/signup` or `/auth/login` endpoint to obtain a JWT token.
-- Click on the [translate:**Authorize**] button (lock icon) in the top-right corner.
-- Enter your JWT token in the format: [translate:`Bearer <your_token>`].
-- Click [translate:**Authorize**] to apply the token globally for all protected endpoints.
+- Click on the **Authorize** button (lock icon) in the top-right corner.
+- Enter your JWT token in the format: `Bearer <your_token>`.
+- Click **Authorize** to apply the token globally for all protected endpoints.
 - You can now execute any protected API call directly from Swagger UI without manually adding the token each time.
 
 ### 2. Using Direct API Calls
 
-- Obtain the JWT token by calling [translate:`/auth/signup`] or [translate:`/auth/login`] via your client (e.g., Postman, curl, frontend app).
+- Obtain the JWT token by calling `/auth/signup` or `/auth/login` via your client (e.g., Postman, curl, frontend app).
 - Include the JWT token in the Authorization header of each request to protected endpoints:
 
   
@@ -117,7 +131,7 @@ There are two ways to authenticate your requests when interacting with the Remot
 
 ## License
 
-MIT or similar – see LICENSE.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
@@ -128,4 +142,4 @@ Part of the **Remote Video Library** project suite (see `https://github.com/andr
 
 ---
 
-*Pull requests and suggestions welcome!*
+*Contributions and suggestions welcome!*
