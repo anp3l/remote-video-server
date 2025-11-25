@@ -57,11 +57,22 @@ export const thumbFileFilter = function (req, file, cb) {
   cb(null, true);
 };
 
+const getVideoMetadata = (filePath: string): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(filePath, (error, metadata) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(metadata);
+      }
+    });
+  });
+};
+
 export const createVideo = async (fileObj, customThumbnailPath?: string) => {
   const id = fileObj._id.toString();
   const inputPath = path.join(VIDEO_PATH, fileObj.filename);
   const videoFolderPath = path.join(VIDEO_PATH, id);
-
   const originalVideoPath = path.join(videoFolderPath, `${id}_original${path.extname(fileObj.filename)}`);
 
   // Folder controll helper 
@@ -81,7 +92,11 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
       return;
     }
 
-    const duration = await getVideoDuration(inputPath);
+    const metadata = await getVideoMetadata(inputPath);
+    const duration = metadata.format.duration || 0;
+    const hasAudio = metadata.streams.some(
+      (stream: any) => stream.codec_type === 'audio'
+    );
 
     // 2. Ensure folder exists
     if (!fs.existsSync(videoFolderPath)) {
@@ -89,7 +104,7 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
     }
 
     // 3. Definition of paths
-    const hlsPath = path.join(videoFolderPath, `${id}.m3u8`);
+    const masterPlaylistPath = path.join(videoFolderPath, `${id}_master.m3u8`);
     const staticThumbPath = path.join(videoFolderPath, `${id}.webp`);
     const animatedThumbPath = path.join(videoFolderPath, `${id}_animated.webp`);
     const jpegFramePath = path.join(videoFolderPath, `thumb.jpg`);
@@ -119,35 +134,70 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
       await fs.promises.unlink(jpegFramePath);
     }
 
-    // === HLS CONVERSION ===
-    // Convert to HLS (only if not already exists)
+    // === HLS CONVERSION  with ABR ===
+
     if (!folderExistsOrExit()) return;
-    if (!fs.existsSync(hlsPath)) {
-      await new Promise<void>((resolve, reject) => {
-        ffmpeg(inputPath)
-          .outputOptions([
-            "-preset veryfast",
-            "-g 60",
-            "-sc_threshold 0",
-            "-c:v libx264",
-            "-crf 23",
-            "-maxrate 1000k",
-            "-bufsize 2000k",
-            "-c:a aac",
-            "-b:a 96k",
-            "-f hls",
-            "-hls_time 6",
-            "-hls_playlist_type vod",
-            "-hls_flags independent_segments",
-            "-hls_segment_type mpegts",
-            "-hls_segment_filename", path.join(videoFolderPath, `${id}_%03d.ts`)
-          ])
-          .output(hlsPath)
-          .on("end", resolve)
-          .on("error", reject)
-          .run();
-      });
-    }
+        if (!fs.existsSync(masterPlaylistPath)) {
+          await new Promise<void>((resolve, reject) => {
+            const command = ffmpeg(inputPath);
+            
+            // Video Options (4 streams)
+            const videoOptions = [
+              '-filter_complex',
+              '[0:v]split=4[v1][v2][v3][v4];' +
+              '[v1]copy[v1out];' +
+              '[v2]scale=w=1280:h=720[v2out];' +
+              '[v3]scale=w=854:h=480[v3out];' +
+              '[v4]scale=w=640:h=360[v4out]',
+              
+              '-map', '[v1out]', '-c:v:0', 'libx264', '-b:v:0', '5000k', '-maxrate:v:0', '5350k', '-bufsize:v:0', '10000k',
+              '-map', '[v2out]', '-c:v:1', 'libx264', '-b:v:1', '2800k', '-maxrate:v:1', '2996k', '-bufsize:v:1', '5600k',
+              '-map', '[v3out]', '-c:v:2', 'libx264', '-b:v:2', '1400k', '-maxrate:v:2', '1498k', '-bufsize:v:2', '2800k',
+              '-map', '[v4out]', '-c:v:3', 'libx264', '-b:v:3', '800k', '-maxrate:v:3', '856k', '-bufsize:v:3', '1600k',
+            ];
+            
+            // Audio Options (only if has audio)
+            const audioOptions = hasAudio ? [
+              '-map', '0:a', '-map', '0:a', '-map', '0:a', '-map', '0:a',
+              '-c:a', 'aac', '-b:a', '128k',
+              '-var_stream_map', 'v:0,a:0 v:1,a:1 v:2,a:2 v:3,a:3'
+            ] : [
+              '-var_stream_map', 'v:0 v:1 v:2 v:3'
+            ];
+            
+            // Common Options
+            const commonOptions = [
+              '-preset', 'medium',
+              '-g', '48',
+              '-keyint_min', '48',
+              '-sc_threshold', '0',
+              '-f', 'hls',
+              '-hls_time', '4',
+              '-hls_playlist_type', 'vod',
+              '-hls_flags', 'independent_segments',
+              '-master_pl_name', `${id}_master.m3u8`,
+              '-hls_segment_filename', path.join(videoFolderPath, `${id}_v%v_%03d.ts`)
+            ];
+            
+            command
+              .outputOptions([...videoOptions, ...audioOptions, ...commonOptions])
+              .output(path.join(videoFolderPath, `${id}_stream_%v.m3u8`))
+              .on("end", () => {
+                console.log(`[createVideo] HLS conversion completed for ${id}`);
+                resolve();
+              })
+              .on("error", (err) => {
+                console.error(`[createVideo] FFmpeg error for ${id}:`, err.message);
+                reject(err);
+              })
+              .on("progress", (progress) => {
+                if (progress.percent) {
+                  console.log(`[createVideo] ${id} - Processing: ${Math.round(progress.percent)}%`);
+                }
+              })
+              .run();
+          });
+        }
     // === ANIMATED THUMBNAIL ===
     // Generate animated thumbnail
     if (!folderExistsOrExit()) return;
@@ -166,7 +216,7 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
     // Update the database if the video still exists
     if (await File.exists({ _id: id })) {
       const updateData: any = {
-        hls: `${id}.m3u8`,
+        hls: `${id}_master.m3u8`,
         static_thumbnail: `${id}.webp`,
         animated_thumbnail: `${id}_animated.webp`,
          original_video: `${id}_original${path.extname(fileObj.filename)}`,
@@ -216,16 +266,4 @@ export const createCustomThumbnail = async (
     console.error("Error creating custom thumbnail:", err);
     throw err; 
   }
-};
-
-const getVideoDuration = (filePath: string): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    ffmpeg.ffprobe(filePath, (error, metadata) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(metadata.format.duration || 0);
-      }
-    });
-  });
 };
