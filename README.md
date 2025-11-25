@@ -32,7 +32,7 @@ The backend server for the **Remote Video Library** project. Secure, private, an
 
 ### 1. Clone the repository
 
-git clone https://github.com/andrea-peluso/remote-video-server.git
+git clone https://github.com/anp3l/remote-video-server.git
 
 cd remote-video-server
 
@@ -139,8 +139,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Author
 
-Built by [Andrea](https://github.com/andrea-peluso)  
-Part of the **Remote Video Library** project suite (see `https://github.com/andrea-peluso/remote-video-client.git`)
+Built by [Andrea](https://github.com/anp3l)  
+Part of the **Remote Video Library** project suite (see `https://github.com/anp3l/remote-video-client.git`)
 
 ---
 
