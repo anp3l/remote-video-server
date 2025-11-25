@@ -434,10 +434,8 @@ routeVideos.patch(
  * /videos/stream/{id}/{file}:
  *   get:
  *     summary: Stream HLS video or segments
- *     description: Serves the master playlist file (.m3u8) or video segments (.ts) for HLS streaming. If {file} is not specified, the main .m3u8 file is served.
+ *     description: Serves the master playlist file (.m3u8) or video segments (.ts) for HLS streaming. Uses signed URL authentication via query parameters (no JWT required).
  *     tags: [Videos]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -451,8 +449,29 @@ routeVideos.patch(
  *         required: false
  *         schema:
  *           type: string
- *         description: Specific file name to serve (segment .ts or playlist .m3u8). OPTIONAL - serves the main .m3u8 if omitted
- *         example: "507f1f77bcf86cd799439011_001.ts"
+ *         description: Specific file name (segment .ts or playlist .m3u8). If omitted, serves main master playlist
+ *         example: "507f1f77bcf86cd799439011_v0_001.ts"
+ *       - in: query
+ *         name: expires
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Expiration timestamp (milliseconds since epoch)
+ *         example: "1700000000000"
+ *       - in: query
+ *         name: signature
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: HMAC-SHA256 signature for URL verification
+ *         example: "a3f5b8c2d1e4f7a9b2c5d8e1f4a7b0c3"
+ *       - in: query
+ *         name: uid
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID who owns the video
+ *         example: "507f1f77bcf86cd799439011"
  *     responses:
  *       200:
  *         description: Video stream or playlist
@@ -467,28 +486,29 @@ routeVideos.patch(
  *               type: string
  *               format: binary
  *               description: HLS video segment (.ts)
- *           application/octet-stream:
- *             schema:
- *               type: string
- *               format: binary
- *               description: Generic file if type not recognized
  *       401:
- *         description: Missing or invalid token
+ *         description: Missing or invalid signature parameters
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Missing signature parameters"
  *       403:
  *         description: Not authorized to view this video
  *       404:
  *         description: Video or file not found
  *       423:
- *         description: Video processing locked (still in progress)
+ *         description: Video processing not completed yet
  *       500:
- *         description: Error during streaming
+ *         description: Error streaming video
  * /videos/stream/{id}:
  *   get:
- *     summary: Stream main HLS playlist
- *     description: Serves the master playlist file (.m3u8) of the video to start HLS streaming.
+ *     summary: Stream main HLS master playlist
+ *     description: Serves the master playlist file (.m3u8) of the video. Uses signed URL authentication.
  *     tags: [Videos]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -497,19 +517,38 @@ routeVideos.patch(
  *           type: string
  *         description: MongoDB ID of the video
  *         example: "507f1f77bcf86cd799439011"
+ *       - in: query
+ *         name: expires
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Expiration timestamp (milliseconds since epoch)
+ *         example: "1700000000000"
+ *       - in: query
+ *         name: signature
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: HMAC-SHA256 signature for URL verification
+ *         example: "a3f5b8c2d1e4f7a9b2c5d8e1f4a7b0c3"
+ *       - in: query
+ *         name: uid
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID who owns the video
+ *         example: "507f1f77bcf86cd799439011"
  *     responses:
  *       200:
  *         description: Master HLS playlist
  *       401:
- *         description: Missing or invalid token
+ *         description: Invalid signed URL
  *       403:
- *         description: Not authorized to view this video
+ *         description: Not authorized
  *       404:
  *         description: Video not available
  *       423:
  *         description: Video processing in progress
- *       500:
- *         description: Error during streaming
  */
 routeVideos.get(
   "/videos/stream/:id/:file?",
@@ -1782,7 +1821,68 @@ routeVideos.post(
   }
 );
 
-
+/**
+ * @swagger
+ * /videos/{id}/refresh-token:
+ *   post:
+ *     summary: Refresh signed URL token for secure video streaming
+ *     description: Generates a new signed URL token valid for 15 minutes to extend streaming session without interruption. Requires JWT authentication and ownership verification.
+ *     tags: [Videos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: MongoDB ID of the video
+ *         example: "507f1f77bcf86cd799439011"
+ *     responses:
+ *       200:
+ *         description: New signed token parameters generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 expires:
+ *                   type: string
+ *                   description: Expiration timestamp of the renewed token (milliseconds since epoch)
+ *                 signature:
+ *                   type: string
+ *                   description: HMAC SHA256 signature of the video ID, user ID, and expiry
+ *                 uid:
+ *                   type: string
+ *                   description: User ID associated with the token
+ *                 expiresAt:
+ *                   type: integer
+ *                   description: Expiration timestamp as a number for convenience
+ *       403:
+ *         description: User is not authorized to access this video
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Video not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       423:
+ *         description: Video processing not completed yet
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error while refreshing token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 routeVideos.post(
   "/videos/:id/refresh-token",
   verifyToken,
