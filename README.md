@@ -22,9 +22,12 @@ The backend server for the **Remote Video Library** project. Secure, private, an
 
 ## Requirements
 
-- **Node.js** v16 or higher
-- **MongoDB** instance (local or remote)
-- [ffmpeg](https://ffmpeg.org/) available in your PATH
+- **Node.js** v16 or higher  
+- **MongoDB** instance (local or remote)  
+- **ffmpeg** with libx264 and AAC support installed and available in PATH  
+  - Required for video transcoding and thumbnail generation  
+  - Check installation with `ffmpeg -version`  
+- **Sufficient disk space** for multi-bitrate processing (about 3-4x original video size) 
 
 ---
 
@@ -82,28 +85,92 @@ There are two ways to authenticate your requests when interacting with the Remot
 
 ---
 
+## Video Processing & Streaming
+
+### Adaptive Bitrate Streaming (ABR)
+
+Videos are automatically transcoded into **4 quality levels** for optimal streaming experience:
+
+| Quality | Resolution | Video Bitrate | Use Case                  |
+|---------|------------|--------------|---------------------------|
+| 1080p   | 1920x1080  | 5000 kbps    | Desktop, fiber connection |
+| 720p    | 1280x720   | 2800 kbps    | Desktop, good connection  |
+| 480p    | 854x480    | 1400 kbps    | Mobile, moderate connection |
+| 360p    | 640x360    | 800 kbps     | Mobile, slow connection   |
+
+**How it works:**  
+- Videos are processed into HLS format with a master playlist named `{id}_master.m3u8`  
+- The player automatically switches quality based on network conditions  
+- Seamless quality transitions without buffering  
+- Audio is automatically detected and processed; videos without audio are supported  
+
+**Technical details:**  
+- Codec: H.264 (libx264) with AAC audio  
+- Segment duration: 4 seconds  
+- GOP size: 48 frames for better seeking  
+- Preset: medium (balance between quality and encoding speed)  
+
+### Storage Requirements
+
+Due to ABR, each video requires **~3-4 times** the original size:  
+- Example: 100 MB original video → ~300-400 MB total storage  
+- Each quality level generates separate `.ts` segments  
+- Storage scales with video duration and quality settings  
+
+### Secure Token System
+
+Videos use **signed URLs** with HMAC-SHA256 and automatic refresh:  
+- Initial token validity: 15 minutes  
+- Tokens tied to user and video ID for security  
+- Frontend refreshes tokens when less than 5 minutes remain  
+- Refresh endpoint available at `POST /videos/:id/refresh-token` (JWT protected)  
+
+---
+
 ## Main API Endpoints
 
 | Method | Endpoint                       | Description                            |
 | ------ | ------------------------------ | -------------------------------------- |
 | POST   | `/auth/signup`                 | Register (username, email, password)   |
 | POST   | `/auth/login`                  | Login (email, password)                |
-| GET    | `/videos`                      | List your videos                       |
-| POST   | `/videos`                      | Upload video                          |
-| GET    | `/videos/:id`                  | Video details                          |
-| PATCH  | `/videos/:id`                  | Edit metadata                          |
-| DELETE | `/videos/:id`                  | Delete video + assets                  |
-| GET    | `/videos/stream/:id/:file?`    | HLS stream                             |
-| GET    | `/videos/thumb/static/:id`     | Static thumbnail (.webp)               |
-| PATCH  | `/videos/thumb/custom/:id`     | Upload custom thumbnail                |
-| GET    | `/videos/thumb/animated/:id`   | Animated thumbnail (.webp)             |
-| GET    | `/videos/status/:id`           | Processing status (light polling)      |
-| GET    | `/videos/duration/:id`         | Video duration (secs)                  |
-| GET    | `/videos/download/:id`         | Original video download (HTTP 206)     |
+| POST   | `/videos`                      | Upload video (JWT protected)           |
+| GET    | `/videos`                      | List your videos (JWT protected)       |
+| GET    | `/videos/:id`                  | Video details (JWT protected)          |
+| PATCH  | `/videos/:id`                  | Edit metadata (JWT protected)          |
+| PATCH  | `/videos/thumb/custom/:id`     | Upload custom thumbnail (JWT protected) |
+| DELETE | `/videos/:id`                  | Delete video + assets (JWT protected)  |
+| POST   | `/videos/:id/signed-url`       | Generate initial signed URLs for streaming and thumbnails (JWT protected)          |
+| POST   | `/videos/:id/refresh-token`    | Refresh signed URL for extended playback (JWT protected)     |
+| GET    | `/videos/stream/:id`           | HLS master playlist via signed URL auth (query: expires, signature, uid)            |
+| GET    | `/videos/stream/:id/:file?`    | HLS segments/playlists via signed URL auth (query: expires, signature, uid)                             |
+| GET    | `/videos/thumb/signed/:id`     | Serve static thumbnail via signed URL auth (WebP, query: expires, signature, uid)               |
+| GET    | `/videos/thumb/static/:id`     | Static thumbnail .webp (JWT protected)  |
+| GET    | `/videos/thumb/animated/:id`   | Animated thumbnail .webp (JWT protected)|
+| GET    | `/videos/status/:id`           | Processing status (JWT protected)      |
+| GET    | `/videos/duration/:id`         | Video duration in seconds (JWT protected)                 |
+| GET    | `/videos/download/:id`         | Original video download with HTTP 206 support (JWT protected)     |
 
 *All endpoints except `/auth/*` require authentication.*
 
 - Full Swagger (OpenAPI) available at `/docs` (if enabled).
+
+---
+
+## Video Upload Flow
+
+1. **Upload** a video via `POST /videos`.  
+   - The server responds immediately with basic video metadata and sets `videoStatus` to `"inProgress"`.  
+   - The uploaded file is saved and referenced in the database for immediate queries.
+
+2. **Asynchronous background processing** starts post-upload:  
+   - Full metadata extraction (including duration and audio tracks)  
+   - Static thumbnail generation (snapshot at 4 seconds)  
+   - Video transcoding to 4 HLS adaptive bitrate quality levels  
+   - Animated thumbnail generation (3 seconds preview GIF/WebP)  
+
+3. Clients may **poll video status** via `/videos/status/:id` to track processing progress in real time.
+
+4. On successful processing completion, `videoStatus` is updated to `"uploaded"`, signifying readiness for streaming.
 
 ---
 
