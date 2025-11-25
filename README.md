@@ -46,10 +46,11 @@ npm install
 ### 3. Environment variables
 
 Create a `.env` file with:
+```
 JWT_SECRET=your-very-secret-key
 PORT=3070
 MONGO_URI=mongodb://127.0.0.1:27017/videoLibrary
-
+```
 Or use `/config/config.json` as alternative.
 
 ### 4. Start MongoDB
@@ -201,14 +202,3 @@ Videos use **signed URLs** with HMAC-SHA256 and automatic refresh:
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## Author
-
-Built by [Andrea](https://github.com/anp3l)  
-Part of the **Remote Video Library** project suite (see `https://github.com/anp3l/remote-video-client.git`)
-
----
-
-*Contributions and suggestions welcome!*
