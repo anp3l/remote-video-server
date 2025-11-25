@@ -1765,7 +1765,7 @@ routeVideos.post(
       }
 
       // Generate signed URLs
-      const signedParams = generateSignedUrl({ videoId, userId, expiresInMinutes: 10 });
+      const signedParams = generateSignedUrl({ videoId, userId, expiresInMinutes: 15 });
       
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       const streamUrl = `${baseUrl}/videos/stream/${videoId}/${fileData.hls}${signedParams}`;
@@ -1778,6 +1778,53 @@ routeVideos.post(
       });
     } catch (error) {
       res.status(500).json({ error: "Error generating signed URL" });
+    }
+  }
+);
+
+
+routeVideos.post(
+  "/videos/:id/refresh-token",
+  verifyToken,
+  async (req: AuthRequest, res) => {
+    const videoId = req.params.id;
+    const userId = req.userId!;
+
+    try {
+      const fileData = await File.findById(videoId);
+
+      if (!fileData) {
+        return res.status(404).json({ error: "Video not found" });
+      }
+
+      // Check ownership
+      if (fileData.userId.toString() !== userId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      if (fileData.videoStatus !== "uploaded") {
+        return res.status(423).json({ error: "Video not ready" });
+      }
+
+      // Generate signed URLs
+      const signedParams = generateSignedUrl({ 
+        videoId, 
+        userId, 
+        expiresInMinutes: 15 
+      });
+      
+      // Extract parameters
+      const params = new URLSearchParams(signedParams.substring(1)); // Rimuovi il "?"
+      
+      res.json({
+        expires: params.get('expires'),
+        signature: params.get('signature'),
+        uid: params.get('uid'),
+        expiresAt: Number(params.get('expires'))
+      });
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+      res.status(500).json({ error: "Error refreshing token" });
     }
   }
 );
