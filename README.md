@@ -50,6 +50,7 @@ Create a `.env` file with:
 JWT_SECRET=your-very-secret-key
 PORT=3070
 MONGO_URI=mongodb://127.0.0.1:27017/videoLibrary
+ENABLE_VIDEO_LOGS=false
 ```
 Or use `/config/config.json` as alternative.
 

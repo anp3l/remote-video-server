@@ -8,6 +8,15 @@ export interface AuthRequest extends Request {
   userId?: string;
 }
 
+/**
+ * Verify the JWT token in the Authorization header of the request.
+ * If the token is missing, invalid, or expired, return a 401 response.
+ * If the token is valid, set the userId property of the request object
+ * and call the next middleware function.
+ * @param {AuthRequest} req - The request object
+ * @param {Response} res - The response object
+ * @param {NextFunction} next - The next middleware function
+ */
 export const verifyToken = (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
 
@@ -26,7 +35,16 @@ export const verifyToken = (req: AuthRequest, res: Response, next: NextFunction)
   }
 };
 
-// Middleware for signed URLs
+/**
+ * Verify the signed URL parameters in the request query.
+ * If any of the parameters are missing, the signature is invalid, or the
+ * signature has expired, return a 401 response.
+ * If the signature is valid, set the userId property of the request object
+ * and call the next middleware function.
+ * @param {AuthRequest} req - The request object
+ * @param {Response} res - The response object
+ * @param {NextFunction} next - The next middleware function
+ */
 export const verifySignedUrl = (req: AuthRequest, res: Response, next: NextFunction) => {
   const { expires, signature, uid } = req.query;
   const videoId = req.params.id;

@@ -6,13 +6,15 @@ import { File } from "../models/data.model";
 import { VIDEO_PATH } from "../server.settings";
 
 const ffmpeg = require("fluent-ffmpeg");
+const ENABLE_LOGS = process.env.ENABLE_VIDEO_LOGS === 'true';
+
 
 /**
- * @description check each file video if is allowed or not to be uploaded
- * @param req
- * @param file
- * @param cb
- * @returns
+ * Checks if a file is of an allowed video type (based on the `allowedVideoTypes` config variable)
+ * @param {express.Request} req - The Express request object
+ * @param {Express.Multer.File} file - The uploaded file
+ * @param {Function} cb - The callback function to be called after the check has been performed
+ * @returns {void} - Passes the result of the check to the callback function
  */
 export const videoFileFilter = function (req, file, cb) {
   // Obtain the allowed file types
@@ -35,6 +37,13 @@ export const videoFileFilter = function (req, file, cb) {
   cb(null, true);
 };
 
+/**
+ * Checks if a file is of an allowed thumbnail type (based on the `allowedThumbTypes` config variable)
+ * @param {express.Request} req - The Express request object
+ * @param {Express.Multer.File} file - The uploaded file
+ * @param {Function} cb - The callback function to be called after the check has been performed
+ * @returns {void} - Passes the result of the check to the callback function
+ */
 export const thumbFileFilter = function (req, file, cb) {
   // Obtain the allowed file types
   const extensions: string = config.get("allowedThumbTypes");
@@ -57,6 +66,15 @@ export const thumbFileFilter = function (req, file, cb) {
   cb(null, true);
 };
 
+/**
+ * Retrieves the metadata of a video file using ffmpeg's ffprobe command.
+ * @param {string} filePath - The path to the video file.
+ * @returns {Promise<any>} - A promise that resolves with the video metadata or rejects with an error.
+ * @example
+ * const filePath = 'path/to/video.mp4';
+ * const metadata = await getVideoMetadata(filePath);
+ * console.log(metadata);
+ */
 const getVideoMetadata = (filePath: string): Promise<any> => {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(filePath, (error, metadata) => {
@@ -69,8 +87,25 @@ const getVideoMetadata = (filePath: string): Promise<any> => {
   });
 };
 
+/**
+ * Creates a video from an uploaded file.
+ * This function performs the following steps:
+ *  - Checks if the video exists in the database.
+ *  - Ensures the video folder exists.
+ *  - Generates a static thumbnail (JPEG → WebP).
+ *  - Generates an animated thumbnail (FFmpeg).
+ *  - Converts the video to HLS format (ABR).
+ *  - Updates the database with the generated files and video status.
+ * @param {File} fileObj - The uploaded file.
+ * @param {string} customThumbnailPath - The path to the custom thumbnail file (optional).
+ */
 export const createVideo = async (fileObj, customThumbnailPath?: string) => {
   const id = fileObj._id.toString();
+
+  if (ENABLE_LOGS) {
+    console.log(`[createVideo] Starting processing for video ${id}`);
+  }
+
   const inputPath = path.join(VIDEO_PATH, fileObj.filename);
   const videoFolderPath = path.join(VIDEO_PATH, id);
   const originalVideoPath = path.join(videoFolderPath, `${id}_original${path.extname(fileObj.filename)}`);
@@ -97,6 +132,10 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
     const hasAudio = metadata.streams.some(
       (stream: any) => stream.codec_type === 'audio'
     );
+
+    if (ENABLE_LOGS) {
+      console.log(`[createVideo] Video ${id} - Duration: ${duration}s, Has audio: ${hasAudio}`);
+    }
 
     // 2. Ensure folder exists
     if (!fs.existsSync(videoFolderPath)) {
@@ -183,7 +222,9 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
               .outputOptions([...videoOptions, ...audioOptions, ...commonOptions])
               .output(path.join(videoFolderPath, `${id}_stream_%v.m3u8`))
               .on("end", () => {
-                console.log(`[createVideo] HLS conversion completed for ${id}`);
+                if (ENABLE_LOGS) {
+                  console.log(`[createVideo] HLS conversion completed for ${id}`);
+                }
                 resolve();
               })
               .on("error", (err) => {
@@ -191,7 +232,7 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
                 reject(err);
               })
               .on("progress", (progress) => {
-                if (progress.percent) {
+                if (ENABLE_LOGS && progress.percent) {
                   console.log(`[createVideo] ${id} - Processing: ${Math.round(progress.percent)}%`);
                 }
               })
@@ -243,6 +284,16 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
   }
 };
 
+/**
+ * Creates a custom thumbnail for a video using sharp.
+ * It takes a thumbnail image path and a video id as input,
+ * creates a custom thumbnail in the video folder with the same id,
+ * removes the temporary thumbnail file, and updates the custom thumbnail path in the database.
+ * If an error occurs, it logs the error and throws it.
+ * @param {string} thumbnailPath - The path of the thumbnail image.
+ * @param {string} id - The id of the video.
+ * @returns {Promise<void>} A promise that resolves when the custom thumbnail is created successfully.
+ */
 export const createCustomThumbnail = async (
   thumbnailPath: string,
   id: string
