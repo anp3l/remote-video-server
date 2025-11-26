@@ -14,6 +14,8 @@ import { generateSignedUrl } from '../utils/signedUrl';
 
 type MulterFile = Express.Multer.File;
 
+const ENABLE_LOGS = process.env.ENABLE_VIDEO_LOGS === 'true';
+
 export const routeVideos = express.Router();
 
 /**
@@ -1648,7 +1650,9 @@ routeVideos.delete(
           while (retries < maxRetries) {
             try {
               await fs.promises.rm(folderPath, { recursive: true, force: true });
-              console.log(`Successfully deleted folder: ${folderPath}`);
+              if (ENABLE_LOGS) {
+                console.log(`Successfully deleted folder: ${folderPath}`);
+              }
               return;
             } catch (err: any) {
               if (err.code === "ENOENT") {

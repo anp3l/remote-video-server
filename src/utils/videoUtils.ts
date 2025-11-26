@@ -218,16 +218,34 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
               '-hls_segment_filename', path.join(videoFolderPath, `${id}_v%v_%03d.ts`)
             ];
             
+            let killCheckInterval: NodeJS.Timeout;
+
             command
               .outputOptions([...videoOptions, ...audioOptions, ...commonOptions])
               .output(path.join(videoFolderPath, `${id}_stream_%v.m3u8`))
+              .on("start", () => {
+                // Check if the folder has been deleted
+                killCheckInterval = setInterval(() => {
+                  if (!fs.existsSync(videoFolderPath)) {
+                    console.warn(`[createVideo] Kill switch: folder deleted for ${id}, stopping ffmpeg.`);
+                    command.kill("SIGKILL");
+                    clearInterval(killCheckInterval);
+                  }
+                }, 2000);
+              })
               .on("end", () => {
+                clearInterval(killCheckInterval);
                 if (ENABLE_LOGS) {
                   console.log(`[createVideo] HLS conversion completed for ${id}`);
                 }
                 resolve();
               })
               .on("error", (err) => {
+                clearInterval(killCheckInterval);
+                if (err.message.includes("SIGKILL") || !fs.existsSync(videoFolderPath)) {
+                  console.warn(`[createVideo] Process aborted gracefully for ${id}`);
+                  return resolve();
+                }
                 console.error(`[createVideo] FFmpeg error for ${id}:`, err.message);
                 reject(err);
               })
@@ -255,7 +273,7 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
     }
 
     // Update the database if the video still exists
-    if (await File.exists({ _id: id })) {
+    if (folderExistsOrExit() && await File.exists({ _id: id })) {
       const updateData: any = {
         hls: `${id}_master.m3u8`,
         static_thumbnail: `${id}.webp`,
@@ -265,21 +283,42 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
         videoStatus: "uploaded",
       };
       
-      // Aggiungi custom_thumbnail se presente
+      // Add custom thumbnail if it exists
       if (customThumbnailPath) {
         updateData.custom_thumbnail = `${id}_custom.webp`;
       }
       
       await File.findByIdAndUpdate(id, updateData);
+      if (ENABLE_LOGS) console.log(`[createVideo] Video ${id} successfully processed.`);
     }
 
   } catch (err) {
+    if (!fs.existsSync(videoFolderPath)) {
+       console.log(`[createVideo] Processing stopped because video ${id} was deleted.`);
+       return; 
+    }
+
     console.error(`[createVideo] Error processing video ${id}:`, err);
     await File.findByIdAndUpdate(id, { videoStatus: "error" });
   } finally {
-    // Move the original file to the video folder
     if (fs.existsSync(inputPath)) {
-      await fs.promises.rename(inputPath, originalVideoPath).catch(() => {});
+        if (fs.existsSync(videoFolderPath)) {
+             await fs.promises.rename(inputPath, originalVideoPath).catch((e) => {
+                 console.error(`[createVideo] Error moving file to folder:`, e);
+             });
+        } else {
+             try {
+                 if (ENABLE_LOGS) console.log(`[createVideo] Cleaning up orphan input file: ${inputPath}`);
+                 fs.unlinkSync(inputPath);
+             } catch (e) {
+                 console.error(`[createVideo] Error deleting orphan input file:`, e);
+                 setTimeout(() => {
+                     try { 
+                        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); 
+                     } catch(e2) { }
+                 }, 1000);
+             }
+        }
     }
   }
 };
