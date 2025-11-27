@@ -6,6 +6,8 @@
 
 The backend server for the **Remote Video Library** project. Secure, private, and built with Node.js, Express, and MongoDB. Features user authentication with JWT, HLS streaming, video upload, per-user video management, and full REST API.
 
+> **Note on Architecture:**
+> This project was designed as a distributed cloud architecture where the client is public and connects to user-owned private servers. Currently, the project is configured for **self-hosted local deployment** (Localhost), giving you full control over your data and streaming infrastructure.
 ---
 
 ## Features
