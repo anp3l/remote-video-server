@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import './config/env';
+import { PORT, NODE_ENV } from './config/env';
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
@@ -12,6 +13,8 @@ import swaggerJsDoc from 'swagger-jsdoc';
 
 const app = express();
 
+const port = PORT || config.get("port")
+
 const swaggerOptions = {
   swaggerDefinition: {
     openapi: '3.0.0',
@@ -22,7 +25,7 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: 'http://localhost:' + config.get("port")
+        url: 'http://localhost:' + port
       }
     ],
     tags: [
@@ -106,10 +109,10 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   
   res.status(err.status || 500).json({
     error: err.message || 'Internal Server Error',
-    details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    details: NODE_ENV === 'development' ? err.stack : undefined
   });
 });
 
-app.listen(config.get("port"), () => {
-  console.log(`Server running on port ${config.get("port")}`);
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });

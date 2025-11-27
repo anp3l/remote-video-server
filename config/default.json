@@ -1,6 +1,5 @@
 {
   "port": 3070,
-  "mongo": "mongodb://127.0.0.1:27017/videoLibrary",
   "allowedVideoTypes": "mp4|mov|avi",
   "allowedThumbTypes": "jpg|jpeg|png|webp"
 }

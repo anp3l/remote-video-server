@@ -11,10 +11,10 @@ import {
 import { verifyToken, AuthRequest, verifySignedUrl } from "../middleware/auth.middleware";
 import * as videoUtils from '../utils/videoUtils';
 import { generateSignedUrl } from '../utils/signedUrl';
+import { ENABLE_LOGS } from '../config/env';
 
 type MulterFile = Express.Multer.File;
 
-const ENABLE_LOGS = process.env.ENABLE_VIDEO_LOGS === 'true';
 
 export const routeVideos = express.Router();
 

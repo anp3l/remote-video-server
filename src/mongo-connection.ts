@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
-import config from 'config';
+import { MONGO_URI } from './config/env';
 
-const uri: string = config.get("mongo");
+const uri: string = MONGO_URI;
+
 
 const mongoConnection = mongoose.connect(uri, {
 }).then(() => {

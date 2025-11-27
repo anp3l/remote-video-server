@@ -4,9 +4,9 @@ import sharp from "sharp";
 import config from "config";
 import { File } from "../models/data.model";
 import { VIDEO_PATH } from "../server.settings";
+import { ENABLE_LOGS } from "../config/env";
 
 const ffmpeg = require("fluent-ffmpeg");
-const ENABLE_LOGS = process.env.ENABLE_VIDEO_LOGS === 'true';
 
 
 /**
