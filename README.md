@@ -45,16 +45,43 @@ cd remote-video-server
 
 npm install
 
-### 3. Environment variables
 
-Create a `.env` file with:
+### 3. Environment Setup
+
+**Copy the example environment file and configure your values:**
+
+cp .env.example .env
+
+**Edit `.env` with your values** (required variables marked with *):
 ```
-JWT_SECRET=your-very-secret-key
-PORT=3070
-MONGO_URI=mongodb://127.0.0.1:27017/videoLibrary
-ENABLE_VIDEO_LOGS=false
+Environment (development, production, test)
+NODE_ENV=development*
+
+Secret key for JWT token signing - generate a secure random string (min 32 chars)
+JWT_SECRET=your-very-secret-key*
+
+Enable detailed video processing logs
+ENABLE_LOGS=false
+
+MongoDB connection string - update with your database name and credentials
+MONGO_URI=mongodb://localhost:27017/yourDatabaseName*
 ```
-Or use `/config/config.json` as alternative.
+**Generate a secure JWT_SECRET:**
+
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+
+**Application config** (`config/default.json` - already configured):
+```
+{
+"port": 3070,
+"allowedVideoTypes": "mp4|mov|avi",
+"allowedThumbTypes": "jpg|jpeg|png|webp"
+}
+```
+
+**ℹ️ Configuration separation:**
+> - **`.env`**: Sensitive data and environment-specific settings (**never commit**)
+> - **`config/default.json`**: Stable application settings (**committed to repo**)
 
 ### 4. Start MongoDB
 
@@ -62,7 +89,7 @@ Start MongoDB locally or connect to a remote instance.
 
 ### 5. Run the server
 
-npm run dev
+npm start
 
 ---
 
