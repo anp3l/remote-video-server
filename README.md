@@ -1,6 +1,7 @@
 # Remote Video Library – Backend
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker](https://img.shields.io/badge/Docker-Production_Ready-blue.svg)](https://hub.docker.com/)
 
 ## Description
 
@@ -12,87 +13,87 @@ The backend server for the **Remote Video Library** project. Secure, private, an
 
 ## Features
 
-- JWT authentication: signup, login, protected routes
-- User management (each user can only access their own videos)
-- Video upload, HLS transcoding, and async processing
-- Metadata, tags, categories, thumbnails (static, custom, animated)
-- Download (with HTTP 206 for partial)
-- DELETE, PATCH, all CRUD for videos
-- Full OpenAPI/Swagger docs
+- 🔐 **JWT Authentication**: Secure signup, login, protected routes
+- 🛡️ **User Isolation**: Each user accesses only their own videos
+- 🎬 **HLS Streaming**: Adaptive bitrate (1080p, 720p, 480p, 360p)
+- ⚡ **Async Processing**: Background transcoding with status polling
+- 🖼️ **Thumbnails**: Static, custom, and animated previews (WebP)
+- 💾 **Persisted Storage**: Local volume mapping for video persistence
+- 📄 **Documentation**: Full Swagger/OpenAPI UI
 
 ---
 
-## Requirements
-
-- **Node.js** v16 or higher  
-- **MongoDB** instance (local or remote)  
-- **ffmpeg** with libx264 and AAC support installed and available in PATH  
-  - Required for video transcoding and thumbnail generation  
-  - Check installation with `ffmpeg -version`  
-- **Sufficient disk space** for multi-bitrate processing (about 3-4x original video size) 
-
----
-
-## Setup
+## Setup & Installation
 
 ### 1. Clone the repository
-
+```
 git clone https://github.com/anp3l/remote-video-server.git
-
 cd remote-video-server
+```
 
-### 2. Install dependencies
+### 2. Configuration
 
-npm install
-
-
-### 3. Environment Setup
-
-**Copy the example environment file and configure your values:**
-
+1. **Copy the example environment file:**
+```
 cp .env.example .env
-
-**Edit `.env` with your values** (required variables marked with *):
 ```
-Environment (development, production, test)
-NODE_ENV=development*
-
-Secret key for JWT token signing - generate a secure random string (min 32 chars)
-JWT_SECRET=your-very-secret-key*
-
-Enable detailed video processing logs
-ENABLE_LOGS=false
-
-MongoDB connection string - update with your database name and credentials
-MONGO_URI=mongodb://localhost:27017/yourDatabaseName*
+2. **Generate a secure key using this command:**
 ```
-**Generate a secure JWT_SECRET:**
-
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-
-**Application config** (`config/default.json` - already configured):
 ```
-{
-"port": 3070,
-"allowedVideoTypes": "mp4|mov|avi",
-"allowedThumbTypes": "jpg|jpeg|png|webp"
-}
+Copy the output and replace `your-very-secret-key` in the `.env` file.
+
+### 3. Choose your Deployment Method
+
+#### Option A: Docker (Recommended)
+Includes **MongoDB** and **FFmpeg** pre-configured. Zero setup required.
+
+- Build and start:
+```
+docker-compose up --build
 ```
 
-**ℹ️ Configuration separation:**
-> - **`.env`**: Sensitive data and environment-specific settings (**never commit**)
-> - **`config/default.json`**: Stable application settings (**committed to repo**)
+- Server running at: [**http://localhost:3070**](http://localhost:3070)
+- Swagger Docs: [**http://localhost:3070/docs**](http://localhost:3070/docs)
+- **Persistence**: Videos are saved in `./uploads` on your host machine.
 
-### 4. Start MongoDB
+Docker Commands Cheat Sheet:
+```
+#Start (and rebuild if needed)
+docker-compose up --build
 
-Start MongoDB locally or connect to a remote instance.
+#Stop containers
+docker-compose down
 
-### 5. Run the server
+#Full Reset (clean images & volumes)
+docker-compose down -v --rmi all
+```
 
+#### Option B: Manual Setup
+Requires **Node.js v16+**, **MongoDB**, and **FFmpeg**.
+
+1. **Install dependencies:**
+```
+npm install
+```
+
+2. **Install FFmpeg:**
+- Ensure `ffmpeg` with libx264/AAC support is in your PATH.
+- Verify with: `ffmpeg -version`
+
+3. **Start MongoDB:**
+- Ensure MongoDB is running locally on port 27017.
+
+4. **Start Server:**
+```
 npm start
-
+```
 ---
-
+## Configuration Architecture
+The project separates configuration into two layers:
+- **Sensitive (`.env`)**: Secrets like `JWT_SECRET` and `MONGO_URI` (git-ignored).
+- **Application (`config/default.json`)**: Logic settings like allowed video formats.
+---
 ## API Authentication
 
 There are two ways to authenticate your requests when interacting with the Remote Video Library API:
@@ -110,10 +111,9 @@ There are two ways to authenticate your requests when interacting with the Remot
 
 - Obtain the JWT token by calling `/auth/signup` or `/auth/login` via your client (e.g., Postman, curl, frontend app).
 - Include the JWT token in the Authorization header of each request to protected endpoints:
-
-  
-  Authorization: Bearer <your_token>
-
+```
+Authorization: Bearer <your_token>
+```
 ---
 
 ## Video Processing & Streaming
@@ -183,7 +183,7 @@ Videos use **signed URLs** with HMAC-SHA256 and automatic refresh:
 
 *All endpoints except `/auth/*` require authentication.*
 
-- Full Swagger (OpenAPI) available at `/docs` (if enabled).
+- Full Swagger (OpenAPI) available at `/docs`.
 
 ---
 
@@ -225,7 +225,6 @@ Videos use **signed URLs** with HMAC-SHA256 and automatic refresh:
 - Full-text and tag-based search
 - User quotas, admin features
 - Rate/abuse limiting
-- Docker and deployment configs
 
 ---
 
