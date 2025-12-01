@@ -1,14 +1,15 @@
 # Remote Video Library – Backend
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docker](https://img.shields.io/badge/Docker-Production_Ready-blue.svg)](https://hub.docker.com/)
+[![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?logo=docker&logoColor=white)](#option-a-docker)
+
 
 ## Description
 
 The backend server for the **Remote Video Library** project. Secure, private, and built with Node.js, Express, and MongoDB. Features user authentication with JWT, HLS streaming, video upload, per-user video management, and full REST API.
 
-> **Note on Architecture:**
-> This project was designed as a distributed cloud architecture where the client is public and connects to user-owned private servers. Currently, the project is configured for **self-hosted local deployment** (Localhost), giving you full control over your data and streaming infrastructure.
+> **Architecture note**
+> The long-term goal of this project is a distributed setup where a public client connects to user-owned private servers. Currently, the backend is configured for **self-hosted local deployment** (localhost), managing user accounts/profiles and video content on the same server instance.
 ---
 
 ## Features
