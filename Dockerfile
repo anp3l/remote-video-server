@@ -10,6 +10,10 @@ RUN npm ci
 
 COPY . .
 
+RUN mkdir -p /app/uploads/videos
+
 EXPOSE 3070
+
+USER node
 
 CMD ["npm", "start"]
