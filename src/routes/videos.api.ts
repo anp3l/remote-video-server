@@ -12,6 +12,9 @@ import { verifyToken, AuthRequest, verifySignedUrl } from "../middleware/auth.mi
 import * as videoUtils from '../utils/videoUtils';
 import { generateSignedUrl } from '../utils/signedUrl';
 import { ENABLE_LOGS } from '../config/env';
+import { updateVideoValidator, uploadVideoValidator, videoIdParamValidator } from '../validators/video.validators';
+import { validateRequest } from '../middleware/validateRequest.middleware';
+import { cleanupMulterFiles } from '../utils/cleanupUploads';
 
 type MulterFile = Express.Multer.File;
 
@@ -48,18 +51,21 @@ export const routeVideos = express.Router();
  *                 type: string
  *                 description: Video title
  *                 example: "My video"
+ *                 maxLength: 150
  *               description:
  *                 type: string
  *                 description: Video description
  *                 example: "Detailed content description"
+ *                 maxLength: 5000
  *               tags:
  *                 type: string
- *                 description: Comma-separated tags
+ *                 description: Comma-separated tags (will be parsed into array server-side)
  *                 example: "tutorial,angular,typescript"
  *               category:
  *                 type: string
  *                 description: Video category
  *                 example: "programming"
+ *                 maxLength: 50
  *     responses:
  *       200:
  *         description: Video uploaded successfully and processing
@@ -118,6 +124,8 @@ routeVideos.post(
       { name: 'thumbnail', maxCount: 1 }
     ])
   ),
+  uploadVideoValidator,
+  validateRequest,
   async (req: AuthRequest, res, next) => {
 
     const userId = req.userId;
@@ -125,6 +133,7 @@ routeVideos.post(
     const files = req.files as { [key: string]: MulterFile[] } | undefined;
 
     if (!files || !files.videos || files.videos.length === 0) {
+      cleanupMulterFiles(req);
       return res.status(400).json({ error: "No files received" });
     }
 
@@ -132,26 +141,14 @@ routeVideos.post(
     const thumbnailFile = files.thumbnail?.[0];
 
     if (thumbnailFile && thumbnailFile.size > 5 * 1024 * 1024) {
-      fs.unlinkSync(thumbnailFile.path);
+      cleanupMulterFiles(req);
       return res.status(413).json({ 
         error: "Thumbnail too large",
         message: "Thumbnail must be maximum 5 MB" 
       });
     }
 
-    const { title, description, tags, category } = req.body;
-    let parsedTags: string[] = [];
-    if (tags) {
-      if (Array.isArray(tags)) {
-        parsedTags = tags;
-      } else if (typeof tags === 'string') {
-        try {
-          parsedTags = JSON.parse(tags);
-        } catch {
-          parsedTags = tags.split(',').map(tag => tag.trim()).filter(tag => tag);
-        }
-      }
-    }
+    const { title = "", description = "", category = "", tags } = req.body;
 
     const data = {
       ...videoFile,
@@ -159,7 +156,7 @@ routeVideos.post(
       videoStatus: "inProgress",
       title: title || "",
       description: description || "",
-      tags: parsedTags,
+      tags: Array.isArray(tags) ? tags : [],
       category: category || "",
     };
 
@@ -245,6 +242,8 @@ routeVideos.post(
 routeVideos.patch(
   "/videos/thumb/custom/:id",
   verifyToken,
+  videoIdParamValidator,
+  validateRequest,
   makeMulterUploadMiddleware(uploadThumb.single("thumbnail")),
   async (req: AuthRequest, res) => {
     const { id } = req.params;
@@ -254,16 +253,19 @@ routeVideos.patch(
     // Check if the video exists
     const video = await File.findById(id);
     if (!video) {
+      cleanupMulterFiles(req);
       return res.status(404).json({ error: "Video not found" });
     }
 
     // Check ownership: user can only update their own videos
     if (video.userId.toString() !== userId) {
+      cleanupMulterFiles(req);
       return res.status(403).json({ error: "Not authorized to modify this video" });
     }
 
     // Check if file exists
     if (!file) {
+      cleanupMulterFiles(req);
       return res.status(400).json({ error: "No thumbnail file uploaded" });
     }
 
@@ -313,20 +315,24 @@ routeVideos.patch(
  *                 type: string
  *                 description: New video title
  *                 example: "Angular 20 Tutorial"
+ *                 maxLength: 150
  *               description:
  *                 type: string
  *                 description: New video description
  *                 example: "Complete guide to Angular 20"
+ *                 maxLength: 2000
  *               tags:
  *                 type: array
  *                 items:
  *                   type: string
+ *                   maxLength: 50
  *                 description: New video tags
  *                 example: ["angular", "typescript", "tutorial"]
  *               category:
  *                 type: string
  *                 description: New video category
  *                 example: "programming"
+ *                 maxLength: 50
  *           examples:
  *             updateTitle:
  *               summary: Update only the title
@@ -390,6 +396,8 @@ routeVideos.patch(
 routeVideos.patch(
   "/videos/:id",
   verifyToken,
+  updateVideoValidator,
+  validateRequest,
   async (req: AuthRequest, res) => {
     const { id } = req.params;
     const { title, description, tags, category } = req.body;
@@ -1787,6 +1795,8 @@ routeVideos.delete(
 routeVideos.post(
   "/videos/:id/signed-url",
   verifyToken,
+  videoIdParamValidator,
+  validateRequest,
   async (req: AuthRequest, res) => {
     const videoId = req.params.id;
     const userId = req.userId!;
@@ -1890,6 +1900,8 @@ routeVideos.post(
 routeVideos.post(
   "/videos/:id/refresh-token",
   verifyToken,
+  videoIdParamValidator,
+  validateRequest,
   async (req: AuthRequest, res) => {
     const videoId = req.params.id;
     const userId = req.userId!;

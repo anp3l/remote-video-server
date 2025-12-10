@@ -3,6 +3,8 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/user.model';
 import { JWT_SECRET } from '../config/env';
+import { signupValidator, loginValidator } from '../validators/auth.validators';
+import { validateRequest } from '../middleware/validateRequest.middleware';
 
 const router = express.Router();
 
@@ -89,13 +91,9 @@ const router = express.Router();
  *                   type: string
  *                   example: Error during registration
  */
-router.post('/signup', async (req, res) => {
+router.post('/signup', signupValidator, validateRequest, async (req, res) => {
   try {
     const { username, email, password } = req.body;
-
-    if (!username || !email || !password) {
-      return res.status(400).json({ error: 'All fields are required' });
-    }
 
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
@@ -103,12 +101,7 @@ router.post('/signup', async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({
-      username,
-      email,
-      password: hashedPassword
-    });
-
+    const user = new User({ username, email, password: hashedPassword });
     await user.save();
 
     const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
@@ -200,13 +193,9 @@ router.post('/signup', async (req, res) => {
  *                   type: string
  *                   example: Error during login
  */
-router.post('/login', async (req, res) => {
+router.post('/login', loginValidator, validateRequest, async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
-    }
 
     const user = await User.findOne({ email });
     if (!user) {
