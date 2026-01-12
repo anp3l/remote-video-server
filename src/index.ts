@@ -2,12 +2,10 @@ import './config/env';
 import { PORT, NODE_ENV } from './config/env';
 import express from 'express';
 import cors from 'cors';
-import bodyParser from 'body-parser';
 import path from 'path';
 import config from 'config';
 import mongoConnection from './mongo-connection';
-import { routeVideos } from './routes/videos.api';
-import authRoutes from './routes/auth.routes';
+import videoRoutes from './routes/video.routes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsDoc from 'swagger-jsdoc';
 
@@ -21,7 +19,7 @@ const swaggerOptions = {
     info: {
       title: 'Video Library API',
       version: '1.0.0',
-      description: 'API for managing remote video library'
+      description: 'API for managing video content. Requires JWT token from Auth Server.'
     },
     servers: [
       {
@@ -32,10 +30,6 @@ const swaggerOptions = {
       {
         name: 'Videos',
         description: 'Endpoints for video management'
-      },
-      {
-        name: 'Auth',
-        description: 'Authentication endpoints'
       }
     ],
     components: {
@@ -44,7 +38,7 @@ const swaggerOptions = {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'Enter JWT token in format: Bearer <token>'
+          description: 'Paste here the RSA-signed JWT token obtained from the Auth Server (port 4000)'
         }
       }
     },
@@ -78,25 +72,27 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
+// === MIDDLEWARE ===
 app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.json());
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// === SWAGGER UI ===
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
   explorer: true,
   customSiteTitle: "Video Library API Docs"
 }));
 
+// === DB CONNECTION ===
 mongoConnection.then(() => {
-  console.log('Connected to MongoDB');
+  console.log('Connected to MongoDB (Video Metadata)');
 }).catch((err) => {
   console.error('MongoDB connection error:', err);
 });
 
-app.use('/auth', authRoutes);
-app.use(routeVideos);
+// === ROUTES ===
+app.use(videoRoutes);
 
 // === GLOBAL ERROR HANDLER ===
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -113,6 +109,8 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
+// === START SERVER ===
 app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+  console.log(`🎬 Video Server running on port ${port}`);
+  console.log(`📄 Swagger Docs available at http://localhost:${port}/api-docs`);
 });

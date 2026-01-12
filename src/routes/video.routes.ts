@@ -1,13 +1,8 @@
-import express from 'express';
+import { Router, Request, Response } from 'express';
 import  fs from "fs";
 import  path from "path";
 import { File } from "../models/data.model";
-import {
-  VIDEO_PATH,
-  makeMulterUploadMiddleware,
-  uploadThumb,
-  uploadVideoWithThumb
-} from "../server.settings";
+import { VIDEO_PATH, makeMulterUploadMiddleware, uploadThumb, uploadVideoWithThumb } from "../server.settings";
 import { verifyToken, AuthRequest, verifySignedUrl } from "../middleware/auth.middleware";
 import * as videoUtils from '../utils/videoUtils';
 import { generateSignedUrl } from '../utils/signedUrl';
@@ -19,7 +14,7 @@ import { cleanupMulterFiles } from '../utils/cleanupUploads';
 type MulterFile = Express.Multer.File;
 
 
-export const routeVideos = express.Router();
+const router = Router();
 
 /**
  * @swagger
@@ -115,7 +110,7 @@ export const routeVideos = express.Router();
  *       500:
  *         description: Error during upload
  */
-routeVideos.post(
+router.post(
   "/videos",
   verifyToken,
   makeMulterUploadMiddleware(
@@ -239,7 +234,7 @@ routeVideos.post(
  *       500:
  *         description: Error saving the thumbnail
  */
-routeVideos.patch(
+router.patch(
   "/videos/thumb/custom/:id",
   verifyToken,
   videoIdParamValidator,
@@ -393,7 +388,7 @@ routeVideos.patch(
  *       500:
  *         description: Error during update
  */
-routeVideos.patch(
+router.patch(
   "/videos/:id",
   verifyToken,
   updateVideoValidator,
@@ -560,7 +555,7 @@ routeVideos.patch(
  *       423:
  *         description: Video processing in progress
  */
-routeVideos.get(
+router.get(
   "/videos/stream/:id/:file?",
   verifySignedUrl,
   async (req: AuthRequest, res) => {
@@ -705,7 +700,7 @@ routeVideos.get(
  *                   type: string
  *                   example: "Static thumbnail missing unexpectedly"
  */
-routeVideos.get(
+router.get(
   "/videos/thumb/signed/:id",
   verifySignedUrl,
   async (req: AuthRequest, res) => {
@@ -798,7 +793,7 @@ routeVideos.get(
  *                   type: string
  *                   example: "Static thumbnail missing unexpectedly"
  */
-routeVideos.get(
+router.get(
   "/videos/thumb/static/:id",
   verifyToken,
   async (req: AuthRequest, res) => {
@@ -892,7 +887,7 @@ routeVideos.get(
  *                   type: string
  *                   example: "Animated thumbnail missing unexpectedly"
  */
-routeVideos.get(
+router.get(
   "/videos/thumb/animated/:id",
   verifyToken,
   async (req: AuthRequest, res) => {
@@ -1035,7 +1030,7 @@ routeVideos.get(
  *                   type: string
  *                   example: "Error during download"
  */
-routeVideos.get(
+router.get(
   "/videos/download/:id",
   verifyToken,
   async (req: AuthRequest, res) => {
@@ -1241,7 +1236,7 @@ routeVideos.get(
  *                   type: string
  *                   example: "Internal server error"
  */
-routeVideos.get(
+router.get(
   "/videos/:id",
   verifyToken,
   async (req: AuthRequest, res) => {
@@ -1338,7 +1333,7 @@ routeVideos.get(
  *                   type: string
  *                   example: "Internal server error"
  */
-routeVideos.get(
+router.get(
   "/videos/status/:id",
   verifyToken,
   async (req: AuthRequest, res) => {
@@ -1419,7 +1414,7 @@ routeVideos.get(
  *                   type: string
  *                   example: "Internal server error"
  */
-routeVideos.get(
+router.get(
   "/videos/duration/:id",
   verifyToken,
   async (req: AuthRequest, res) => {
@@ -1527,7 +1522,7 @@ routeVideos.get(
  *                   type: string
  *                   example: "Error fetching videos"
  */
-routeVideos.get(
+router.get(
   "/videos",
   verifyToken,
   async (req: AuthRequest, res) => {
@@ -1626,7 +1621,7 @@ routeVideos.get(
  *                   type: object
  *                   description: Error details
  */
-routeVideos.delete(
+router.delete(
   "/videos/:id",
   verifyToken,
   async (req: AuthRequest, res) => {
@@ -1792,7 +1787,7 @@ routeVideos.delete(
  *                   type: string
  *                   example: "Error generating signed URL"
  */
-routeVideos.post(
+router.post(
   "/videos/:id/signed-url",
   verifyToken,
   videoIdParamValidator,
@@ -1897,7 +1892,7 @@ routeVideos.post(
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-routeVideos.post(
+router.post(
   "/videos/:id/refresh-token",
   verifyToken,
   videoIdParamValidator,
@@ -1944,3 +1939,5 @@ routeVideos.post(
     }
   }
 );
+
+export default router;

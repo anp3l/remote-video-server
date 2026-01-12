@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { JWT_SECRET } from '../config/env';
+import { STREAM_SECRET } from '../config/env';
 
 export interface SignedUrlParams {
   videoId: string;
@@ -21,7 +21,7 @@ export function generateSignedUrl(params: SignedUrlParams): string {
   const expires = Date.now() + (expiresInMinutes * 60 * 1000);
   
   const signature = crypto
-    .createHmac('sha256', JWT_SECRET)
+    .createHmac('sha256', STREAM_SECRET)
     .update(`${videoId}:${userId}:${expires}`)
     .digest('hex');
   
@@ -57,7 +57,7 @@ export function verifySignature(
   
   // Verify signature
   const expectedSignature = crypto
-    .createHmac('sha256', JWT_SECRET)
+    .createHmac('sha256', STREAM_SECRET)
     .update(`${videoId}:${userId}:${expires}`)
     .digest('hex');
   
