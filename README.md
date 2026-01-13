@@ -62,41 +62,35 @@ cd remote-video-server
 
 ### 2. Configuration
 
-1. **Copy the example environment file:**
+1. **Environment File:**
    ```
    cp .env.example .env
    ```
-2. **Generate a secure key using this command:**
+2. **Generate HMAC Secret:**
+   Used to sign streaming URLs, preventing unauthorized sharing or deep-linking.
+   Run this command and paste the output into `STREAM_SECRET` in `.env`:
+
    ```
    node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
    ```
-   Copy the output and replace `STREAM_SECRET` in the `.env` file.
-3. **Configure the Auth Public Key (Crucial):**
-   This server requires the **Public Key** from the Auth Server to verify tokens.
-
-   **Recommended (Environment Variable):**
-   Get the Base64 string of the public key (from the Auth Server Setup) and add it to your `.env`:
+3. **Configure Auth Public Key (Crucial):**
+   Get the Base64 string of the public key (from the Auth Server) and add it to your `.env`:
    ```
    PUBLIC_KEY_BASE64=... (paste the long base64 string here)
    ```
-   **Alternative (File-based for local dev):**
-   Copy `public.pem` from the `auth-server` project to the root of this project.
+   (Alternative: Place a `public.pem` file in the project root for local dev fallback).
 
 
-### 3. Choose your Deployment Method
+### 3. Deployment Methods
 
 #### Option A: Docker (Recommended)
 Includes **MongoDB** and **FFmpeg** pre-configured. 
 
 > **Note:** Ensure `PUBLIC_KEY_BASE64` is set in your `.env` file before starting.
 
-- **Build and start:**
-   ```
-   docker-compose up --build
-   ```
-- **Server running at:** [**http://localhost:3070**](http://localhost:3070)
-- **Swagger Docs:** [**http://localhost:3070/api-docs**](http://localhost:3070/api-docs)
-- **Persistence**: Videos are saved in `./uploads` on your host machine.
+```
+docker-compose up --build
+```
 
 **Docker Commands Cheat Sheet:**
 ```
@@ -111,7 +105,7 @@ docker-compose down -v --rmi all
 ```
 
 #### Option B: Manual Setup
-Requires **Node.js v16+**, **MongoDB**, and **FFmpeg**.
+Requires **Node.js v18+**, **MongoDB**, and **FFmpeg**.
 
 1. **Install dependencies:**
    ```
@@ -129,32 +123,40 @@ Requires **Node.js v16+**, **MongoDB**, and **FFmpeg**.
    ```
    npm start
    ```
----
-## Configuration Architecture
-- **Auth Key**: `PUBLIC_KEY_BASE64` (in `.env`) or `public.pem` (fallback) is used to verify JWT signatures.
-- **Environment (`.env`)**: Contains `STREAM_SECRET` (HMAC key for video URL signing) and DB connection strings.
-- **App Config (`config/default.json`)**: Application logic settings (allowed formats, max sizes).
 
 ---
-## API Authentication
 
-This server acts as a Resource Server. It does not issue tokens.
+## Usage & Access
 
-### How to Authenticate Requests
+Once the server is running, you can interact with it using the following details.
 
-- **Login** via the separate **Auth Server** (running on port 4000) to obtain a JWT.
-- **Include** the JWT in the Authorization header for all requests to this server:
+### 📍 Access Points
 
-   ```
-   Authorization: Bearer <your_rsa_signed_token>
-   ```
+- **API Root:** [http://localhost:3070](http://localhost:3070/)
+    
+- **Swagger Documentation:** http://localhost:3070/api-docs
+    
 
-### 2. Using Swagger UI
+### 📂 Data Persistence
 
-- Open Swagger UI at `/api-docs`.
-- Click **Authorize**.
-- Paste the token obtained from the Auth Server.
-- You can now test video endpoints directly.
+- **Docker:** Videos are mapped to the `./uploads` directory on your host machine.
+    
+- **Manual:** Videos are saved in the `uploads/` folder inside the project root.
+    
+
+### 🔑 How to Authenticate (Testing)
+
+This server acts as a Resource Server and **does not issue tokens**.
+
+1.  **Get a Token:** Login via your Auth Server (port 4000) to get a JWT.
+    
+2.  **Authorize Swagger:** Open `/api-docs`, click **Authorize**, and paste the token (`Bearer <token>`).
+    
+3.  **Manual Requests:** Include the header in all API calls:
+    
+    ```
+    Authorization: Bearer <your_rsa_signed_token>
+    ```
 ---
 
 ## Video Processing & Streaming
@@ -244,13 +246,6 @@ Streaming playback is protected by **Signed URLs** (HMAC-SHA256), separate from 
 
 ---
 
-## Usage
-
-- Default API root: `http://localhost:3070`
-- Test requests with [Postman](https://www.postman.com/) or similar
-- Use the interactive Swagger docs to try endpoints
-
----
 
 ## Development
 
