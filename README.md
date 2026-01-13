@@ -1,4 +1,4 @@
-# Remote Video Library – Backend
+# Remote Video Library – Video Server
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?logo=docker&logoColor=white)](#option-a-docker)
@@ -6,15 +6,43 @@
 
 ## Description
 
-The backend server for the **Remote Video Library** project. Secure, private, and built with Node.js, Express, and MongoDB. Features user authentication with JWT, HLS streaming, video upload, per-user video management, and full REST API.
+A standalone **Video Resource Server** built for secure video management, processing, and HLS streaming.
+
+Originally developed as part of the **Remote Video Library** ecosystem, this service is intentionally designed to be **reusable as-is** in other projects that need a private video backend (upload, transcoding, storage, streaming) with stateless authentication.
+
+**Key responsibilities:**
+- Validates **RS256 JWT** access tokens issued by an external Identity Provider (e.g., the Remote Video Library Auth Server).
+- Handles video upload, transcoding, and persisted storage.
+- Serves HLS playback securely via **HMAC-signed URLs** (separate from JWT auth).
 
 > **Architecture note**
-> The long-term goal of this project is a distributed setup where a public client connects to user-owned private servers. Currently, the backend is configured for **self-hosted local deployment** (localhost), managing user accounts/profiles and video content on the same server instance.
+> This service is stateless with respect to user credentials: it does not manage passwords or sessions. It relies on cryptographic verification of JWTs via an RSA Public Key (provided via environment variable or file).
+---
+
+## Authentication Standard (JWT Requirements)
+
+To use this Video Server with your own Identity Provider (IdP), your JWTs must meet the following standard:
+
+1. **Algorithm:** `RS256` (RSA Signature with SHA-256).
+2. **Required Claims:**
+   `userId` (string): Unique identifier for the user (used for data isolation).
+3. **Verification:** You must provide the IdP's RSA Public Key to this server (via `PUBLIC_KEY_BASE64` environment variable or `public.pem` file).
+
+**Example Payload:**
+```
+{
+  "userId": "65a123456789abcdef123456",  // MongoDB ObjectId
+  "username": "johndoe",
+  "iat": 1704239022,                     // Issued At (Timestamp)
+  "exp": 1704843822                      // Expiration (7 days later)
+}
+```
+
 ---
 
 ## Features
 
-- 🔐 **JWT Authentication**: Secure signup, login, protected routes
+- 🔐 **RSA Token Verification**: Validates JWTs signed by the external Auth Server
 - 🛡️ **User Isolation**: Each user accesses only their own videos
 - 🎬 **HLS Streaming**: Adaptive bitrate (1080p, 720p, 480p, 360p)
 - ⚡ **Async Processing**: Background transcoding with status polling
@@ -35,30 +63,42 @@ cd remote-video-server
 ### 2. Configuration
 
 1. **Copy the example environment file:**
-```
-cp .env.example .env
-```
+   ```
+   cp .env.example .env
+   ```
 2. **Generate a secure key using this command:**
-```
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
-Copy the output and replace `your-very-secret-key` in the `.env` file.
+   ```
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   ```
+   Copy the output and replace `STREAM_SECRET` in the `.env` file.
+3. **Configure the Auth Public Key (Crucial):**
+   This server requires the **Public Key** from the Auth Server to verify tokens.
+
+   **Recommended (Environment Variable):**
+   Get the Base64 string of the public key (from the Auth Server Setup) and add it to your `.env`:
+   ```
+   PUBLIC_KEY_BASE64=... (paste the long base64 string here)
+   ```
+   **Alternative (File-based for local dev):**
+   Copy `public.pem` from the `auth-server` project to the root of this project.
+
 
 ### 3. Choose your Deployment Method
 
 #### Option A: Docker (Recommended)
-Includes **MongoDB** and **FFmpeg** pre-configured. Zero setup required.
+Includes **MongoDB** and **FFmpeg** pre-configured. 
 
-- Build and start:
-```
-docker-compose up --build
-```
+> **Note:** Ensure `PUBLIC_KEY_BASE64` is set in your `.env` file before starting.
 
-- Server running at: [**http://localhost:3070**](http://localhost:3070)
-- Swagger Docs: [**http://localhost:3070/docs**](http://localhost:3070/docs)
+- **Build and start:**
+   ```
+   docker-compose up --build
+   ```
+- **Server running at:** [**http://localhost:3070**](http://localhost:3070)
+- **Swagger Docs:** [**http://localhost:3070/api-docs**](http://localhost:3070/api-docs)
 - **Persistence**: Videos are saved in `./uploads` on your host machine.
 
-Docker Commands Cheat Sheet:
+**Docker Commands Cheat Sheet:**
 ```
 #Start (and rebuild if needed)
 docker-compose up --build
@@ -74,47 +114,47 @@ docker-compose down -v --rmi all
 Requires **Node.js v16+**, **MongoDB**, and **FFmpeg**.
 
 1. **Install dependencies:**
-```
-npm install
-```
+   ```
+   npm install
+   ```
 
 2. **Install FFmpeg:**
-- Ensure `ffmpeg` with libx264/AAC support is in your PATH.
-- Verify with: `ffmpeg -version`
+   - Ensure `ffmpeg` with libx264/AAC support is in your PATH.
+   - Verify with: `ffmpeg -version`
 
 3. **Start MongoDB:**
-- Ensure MongoDB is running locally on port 27017.
+   - Ensure MongoDB is running locally on port 27017.
 
 4. **Start Server:**
-```
-npm start
-```
+   ```
+   npm start
+   ```
 ---
 ## Configuration Architecture
-The project separates configuration into two layers:
-- **Sensitive (`.env`)**: Secrets like `JWT_SECRET` and `MONGO_URI` (git-ignored).
-- **Application (`config/default.json`)**: Logic settings like allowed video formats.
+- **Auth Key**: `PUBLIC_KEY_BASE64` (in `.env`) or `public.pem` (fallback) is used to verify JWT signatures.
+- **Environment (`.env`)**: Contains `STREAM_SECRET` (HMAC key for video URL signing) and DB connection strings.
+- **App Config (`config/default.json`)**: Application logic settings (allowed formats, max sizes).
+
 ---
 ## API Authentication
 
-There are two ways to authenticate your requests when interacting with the Remote Video Library API:
+This server acts as a Resource Server. It does not issue tokens.
 
-### 1. Using Swagger UI for Authentication
+### How to Authenticate Requests
 
-- Open Swagger UI at `/docs`.
-- Use the `/auth/signup` or `/auth/login` endpoint to obtain a JWT token.
-- Click on the **Authorize** button (lock icon) in the top-right corner.
-- Enter your JWT token in the format: `Bearer <your_token>`.
-- Click **Authorize** to apply the token globally for all protected endpoints.
-- You can now execute any protected API call directly from Swagger UI without manually adding the token each time.
+- **Login** via the separate **Auth Server** (running on port 4000) to obtain a JWT.
+- **Include** the JWT in the Authorization header for all requests to this server:
 
-### 2. Using Direct API Calls
+   ```
+   Authorization: Bearer <your_rsa_signed_token>
+   ```
 
-- Obtain the JWT token by calling `/auth/signup` or `/auth/login` via your client (e.g., Postman, curl, frontend app).
-- Include the JWT token in the Authorization header of each request to protected endpoints:
-```
-Authorization: Bearer <your_token>
-```
+### 2. Using Swagger UI
+
+- Open Swagger UI at `/api-docs`.
+- Click **Authorize**.
+- Paste the token obtained from the Auth Server.
+- You can now test video endpoints directly.
 ---
 
 ## Video Processing & Streaming
@@ -151,20 +191,20 @@ Due to ABR, each video requires **~3-4 times** the original size:
 
 ### Secure Token System
 
-Videos use **signed URLs** with HMAC-SHA256 and automatic refresh:  
-- Initial token validity: 15 minutes  
-- Tokens tied to user and video ID for security  
+Streaming playback is protected by **Signed URLs** (HMAC-SHA256), separate from the main JWT auth. 
+- The `STREAM_SECRET` in `.env` is used to sign these URLs.
+- Tokens expire after 15 minutes (default) and must be refreshed via the API. 
 - Frontend refreshes tokens when less than 5 minutes remain  
 - Refresh endpoint available at `POST /videos/:id/refresh-token` (JWT protected)  
 
 ---
 
-## Main API Endpoints
+## API Endpoints
+
+**Note**: All endpoints below require a valid JWT Bearer token.
 
 | Method | Endpoint                       | Description                            |
 | ------ | ------------------------------ | -------------------------------------- |
-| POST   | `/auth/signup`                 | Register (username, email, password)   |
-| POST   | `/auth/login`                  | Login (email, password)                |
 | POST   | `/videos`                      | Upload video (JWT protected)           |
 | GET    | `/videos`                      | List your videos (JWT protected)       |
 | GET    | `/videos/:id`                  | Video details (JWT protected)          |
@@ -182,10 +222,8 @@ Videos use **signed URLs** with HMAC-SHA256 and automatic refresh:
 | GET    | `/videos/duration/:id`         | Video duration in seconds (JWT protected)                 |
 | GET    | `/videos/download/:id`         | Original video download with HTTP 206 support (JWT protected)     |
 
-*All endpoints except `/auth/*` require authentication.*
 
-- Full Swagger (OpenAPI) available at `/docs`.
-
+- **Full Swagger (OpenAPI) available at:** `http://localhost:3070/api-docs`
 ---
 
 ## Video Upload Flow
@@ -221,11 +259,20 @@ Videos use **signed URLs** with HMAC-SHA256 and automatic refresh:
 
 ---
 
-## Future Work
+## Roadmap & Future Architecture
 
-- Full-text and tag-based search
-- User quotas, admin features
-- Rate/abuse limiting
+### Upcoming Features
+- 🔍 **Advanced Search**: Full-text and tag-based search for video libraries.
+- 📊 **Quotas & Limits**: User storage quotas and rate limiting for API abuse prevention.
+- 👮 **Admin Dashboard**: Global management features for instance administrators.
+
+### Architecture Evolution: JWKS (JSON Web Key Sets)
+Currently, this server uses a static Public Key (`PUBLIC_KEY_BASE64`) for verifying tokens. To support a seamless "Bring Your Own Server" model in the future:
+
+1. **Decentralization**: We will transition to the **OpenID Connect / JWKS** standard.
+2. **Automatic Config**: The Video Server will fetch public keys dynamically from the Auth Server's `/.well-known/jwks.json` endpoint.
+3. **Benefit**: Users will deploy their own instances by simply providing the Auth Server URL, eliminating manual key management and enabling automatic key rotation.
+
 
 ---
 
