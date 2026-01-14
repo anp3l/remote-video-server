@@ -8,6 +8,7 @@ import mongoConnection from './mongo-connection';
 import videoRoutes from './routes/video.routes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsDoc from 'swagger-jsdoc';
+import { version } from '../package.json';
 
 const app = express();
 
@@ -18,7 +19,7 @@ const swaggerOptions = {
     openapi: '3.0.0',
     info: {
       title: 'Video Library API',
-      version: '1.0.0',
+      version: version,
       description: 'API for managing video content. Requires JWT token from Auth Server.'
     },
     servers: [
@@ -111,6 +112,6 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 // === START SERVER ===
 app.listen(port, () => {
-  console.log(`🎬 Video Server running on port ${port}`);
+  console.log(`🎬 Video Server running on port ${port} (v${version})`);
   console.log(`📄 Swagger Docs available at http://localhost:${port}/api-docs`);
 });
