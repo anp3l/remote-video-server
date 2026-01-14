@@ -95,6 +95,15 @@ mongoConnection.then(() => {
 // === ROUTES ===
 app.use(videoRoutes);
 
+// === HEALTH CHECK ===
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'Video Server is running', 
+    version: version,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // === GLOBAL ERROR HANDLER ===
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('=== GLOBAL ERROR HANDLER ===');
