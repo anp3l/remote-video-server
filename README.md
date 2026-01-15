@@ -257,16 +257,12 @@ Streaming playback is protected by **Signed URLs** (HMAC-SHA256), separate from 
 ## Roadmap & Future Architecture
 
 ### Upcoming Features
-- 🔍 **Advanced Search**: Full-text and tag-based search for video libraries.
-- 📊 **Quotas & Limits**: User storage quotas and rate limiting for API abuse prevention.
-- 👮 **Admin Dashboard**: Global management features for instance administrators.
+- 🔍 **Advanced Search:** Full-text and tag-based search
+- 📊 **Storage Quotas:** Per-user storage limits and monitoring
+- 🛡️ **Rate Limiting:** API request throttling
 
-### Architecture Evolution: JWKS (JSON Web Key Sets)
-Currently, this server uses a static Public Key (`PUBLIC_KEY_BASE64`) for verifying tokens. To support a seamless "Bring Your Own Server" model in the future:
-
-1. **Decentralization**: We will transition to the **OpenID Connect / JWKS** standard.
-2. **Automatic Config**: The Video Server will fetch public keys dynamically from the Auth Server's `/.well-known/jwks.json` endpoint.
-3. **Benefit**: Users will deploy their own instances by simply providing the Auth Server URL, eliminating manual key management and enabling automatic key rotation.
+### Architecture Evolution: JWKS
+Planned transition to OpenID Connect / JWKS standard for automatic public key discovery, enabling "bring your own Auth Server" deployments without manual key management.
 
 
 ---
