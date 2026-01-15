@@ -10,7 +10,8 @@ RUN npm ci
 
 COPY . .
 
-RUN mkdir -p /app/uploads/videos
+RUN mkdir -p /app/uploads/videos && \
+    chown -R node:node /app/uploads
 
 EXPOSE 3070
 
