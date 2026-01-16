@@ -81,7 +81,7 @@ cd remote-video-server
    (Alternative: Place a `public.pem` file in the project root for local dev fallback).
 
 
-### 3. Deployment Methods
+### 3. Choose your Setup Method
 
 #### Option A: Docker (Recommended)
 Includes **MongoDB** and **FFmpeg** pre-configured. 
