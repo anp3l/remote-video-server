@@ -41,10 +41,16 @@ export const verifyToken = (req: AuthRequest, res: Response, next: NextFunction)
     req.userId = decoded.userId;
     next();
   } catch (error) {
-    console.error('Token verification failed:', error);
+    if (error instanceof Error && error.name === 'TokenExpiredError') {
+      console.log('⏰ Token expired - client will refresh');
+    } else {
+      console.error('❌ Token verification failed:', error);
+    }
+    
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
+
 
 /**
  * Verify the signed URL parameters in the request query.
