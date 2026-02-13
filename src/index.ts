@@ -1,7 +1,8 @@
 import './config/env';
-import { PORT, NODE_ENV } from './config/env';
+import { PORT, NODE_ENV, ALLOWED_ORIGINS } from './config/env';
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import config from 'config';
 import mongoConnection from './mongo-connection';
@@ -20,7 +21,7 @@ const swaggerOptions = {
     info: {
       title: 'Video Library API',
       version: version,
-      description: 'API for managing video content. Requires JWT token from Auth Server.'
+      description: 'API for managing video content. Requires JWT token from Auth Server via HttpOnly cookies.'
     },
     servers: [
       {
@@ -35,17 +36,17 @@ const swaggerOptions = {
     ],
     components: {
       securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT',
-          description: 'Paste here the RSA-signed JWT token obtained from the Auth Server (port 4000)'
+        cookieAuth: {
+          type: 'apiKey',
+          in: 'cookie',
+          name: 'accessToken',
+          description: 'HttpOnly cookie containing JWT access token from Auth Server'
         }
       }
     },
     security: [
       {
-        bearerAuth: []
+        cookieAuth: []
       }
     ]
   },
@@ -74,7 +75,26 @@ process.on('uncaughtException', (error) => {
 });
 
 // === MIDDLEWARE ===
-app.use(cors());
+// CORS Configuration with credentials support
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, Postman, or same-origin)
+    if (!origin) return callback(null, true);
+    
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`🚫 CORS blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true, // Allow cookies to be sent
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+  exposedHeaders: ['X-CSRF-Token']
+}));
+
+app.use(cookieParser()); // Parse cookies from requests
 app.use(express.json());
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -100,7 +120,8 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'Video Server is running', 
     version: version,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    cookieAuth: 'enabled'
   });
 });
 
@@ -123,4 +144,6 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 app.listen(port, () => {
   console.log(`🎬 Video Server running on port ${port} (v${version})`);
   console.log(`📄 Swagger Docs available at http://localhost:${port}/api-docs`);
+  console.log(`🔐 Cookie-based authentication enabled`);
+  console.log(`🌐 CORS allowed origins: ${ALLOWED_ORIGINS.join(', ')}`);
 });
