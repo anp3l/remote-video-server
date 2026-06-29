@@ -8,32 +8,31 @@ export interface AuthRequest extends Request {
   userId?: string;
 }
 
+
 /**
- * Middleware function that verifies JWT tokens in the Authorization header.
+ * Middleware to verify JWT access token from request cookies.
  * 
- * Extracts the Bearer token from the request's Authorization header, verifies it using RS256 algorithm,
- * and attaches the decoded userId to the request object if valid.
+ * Extracts the access token from the request cookies, validates it using RS256 algorithm,
+ * and attaches the decoded user ID to the request object if valid.
  * 
- * @param {AuthRequest} req - The Express request object with userId property
- * @param {Response} res - The Express response object
- * @param {NextFunction} next - The Express next middleware function
+ * @param req - The Express request object with cookies and custom AuthRequest properties
+ * @param res - The Express response object
+ * @param next - The Express next middleware function
  * 
- * @returns {void}
+ * @returns Calls next() if token is valid, otherwise sends 401 JSON error response
  * 
- * @throws {401} Missing token - If Authorization header is missing or doesn't start with "Bearer "
- * @throws {401} Invalid or expired token - If token verification fails or token is expired
- * 
- * @example
- * app.use(verifyToken);
+ * @throws Returns 401 status with error message if:
+ *   - No token is present in cookies
+ *   - Token is expired
+ *   - Token verification fails for any other reason
  */
 export const verifyToken = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Missing token' });
+  let token = req.cookies?.accessToken;
+
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' });
   }
-
-  const token = authHeader.substring(7);
 
   try {
     const decoded = jwt.verify(token, PUB_KEY, { algorithms: ['RS256'] }) as { userId: string };
