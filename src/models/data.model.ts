@@ -24,7 +24,7 @@ export interface IFile extends Document {
   original_video?: string; 
 }
 
-export var fileSchema: any = new Schema({
+export const fileSchema = new Schema<IFile>({
   fieldname: {
     type: String,
   },
