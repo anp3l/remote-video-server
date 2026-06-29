@@ -43,7 +43,9 @@ To use this Video Server with your own Identity Provider (IdP), your JWTs must m
 ## Features
 
 - 🔐 **RSA Token Verification**: Validates JWTs signed by the external Auth Server
-- 🛡️ **User Isolation**: Each user accesses only their own videos
+- 🍪 **HttpOnly Cookie Auth**: JWT is transmitted via HttpOnly cookie, never exposed to JavaScript
+- 🛡️ **CSRF Protection**: Double-submit cookie pattern (csrf-csrf) on all mutating endpoints
+- 👤 **User Isolation**: Each user accesses only their own videos
 - 🎬 **HLS Streaming**: Adaptive bitrate (1080p, 720p, 480p, 360p)
 - ⚡ **Async Processing**: Background transcoding with status polling
 - 🖼️ **Thumbnails**: Static, custom, and animated previews (WebP)
@@ -148,15 +150,24 @@ Once the server is running, you can interact with it using the following details
 
 This server acts as a Resource Server and **does not issue tokens**.
 
-1.  **Get a Token:** Login via your Auth Server (port 4000) to get a JWT.
-    
-2.  **Authorize Swagger:** Open `/api-docs`, click **Authorize**, and paste the token (`Bearer <token>`).
-    
-3.  **Manual Requests:** Include the header in all API calls:
-    
-    ```
-    Authorization: Bearer <your_rsa_signed_token>
-    ```
+Authentication uses an **HttpOnly cookie** (`accessToken`) set by the Auth Server after login. The cookie is sent automatically by the browser on every request — no manual header needed.
+
+**Flow for mutating endpoints** (POST, PATCH, DELETE):
+
+1. **Login** via the Auth Server → `accessToken` cookie is set automatically.
+
+2. **Get a CSRF token** before any write operation:
+   ```
+   GET /videos/csrf-token
+   ```
+   Response: `{ "csrfToken": "<token>" }`
+
+3. **Include the CSRF token** as a header in the request:
+   ```
+   X-CSRF-Token: <csrfToken>
+   ```
+
+> **Note for Swagger UI:** Cookie-based auth requires the browser to have the `accessToken` cookie already set (from the Auth Server on the same domain). The Swagger UI "Authorize" button is not used for cookie auth — authenticate via the Auth Server first, then use Swagger normally.
 ---
 
 ## Video Processing & Streaming
@@ -203,26 +214,27 @@ Streaming playback is protected by **Signed URLs** (HMAC-SHA256), separate from 
 
 ## API Endpoints
 
-**Note**: All endpoints below require a valid JWT Bearer token.
+**Note**: Endpoints marked **(cookie)** require the `accessToken` HttpOnly cookie. Endpoints marked **(cookie + CSRF)** also require the `X-CSRF-Token` header (obtain it from `GET /videos/csrf-token`). Streaming/thumbnail endpoints use **signed URL** query parameters instead.
 
 | Method | Endpoint                       | Description                            |
 | ------ | ------------------------------ | -------------------------------------- |
-| POST   | `/videos`                      | Upload video (JWT protected)           |
-| GET    | `/videos`                      | List your videos (JWT protected)       |
-| GET    | `/videos/:id`                  | Video details (JWT protected)          |
-| PATCH  | `/videos/:id`                  | Edit metadata (JWT protected)          |
-| PATCH  | `/videos/thumb/custom/:id`     | Upload custom thumbnail (JWT protected) |
-| DELETE | `/videos/:id`                  | Delete video + assets (JWT protected)  |
-| POST   | `/videos/:id/signed-url`       | Generate initial signed URLs for streaming and thumbnails (JWT protected)          |
-| POST   | `/videos/:id/refresh-token`    | Refresh signed URL for extended playback (JWT protected)     |
-| GET    | `/videos/stream/:id`           | HLS master playlist via signed URL auth (query: expires, signature, uid)            |
-| GET    | `/videos/stream/:id/:file?`    | HLS segments/playlists via signed URL auth (query: expires, signature, uid)                             |
-| GET    | `/videos/thumb/signed/:id`     | Serve static thumbnail via signed URL auth (WebP, query: expires, signature, uid)               |
-| GET    | `/videos/thumb/static/:id`     | Static thumbnail .webp (JWT protected)  |
-| GET    | `/videos/thumb/animated/:id`   | Animated thumbnail .webp (JWT protected)|
-| GET    | `/videos/status/:id`           | Processing status (JWT protected)      |
-| GET    | `/videos/duration/:id`         | Video duration in seconds (JWT protected)                 |
-| GET    | `/videos/download/:id`         | Original video download with HTTP 206 support (JWT protected)     |
+| GET    | `/videos/csrf-token`           | Get CSRF token (required before any write) |
+| POST   | `/videos`                      | Upload video (cookie + CSRF)           |
+| GET    | `/videos`                      | List your videos (cookie)              |
+| GET    | `/videos/:id`                  | Video details (cookie)                 |
+| PATCH  | `/videos/:id`                  | Edit metadata (cookie + CSRF)          |
+| PATCH  | `/videos/thumb/custom/:id`     | Upload custom thumbnail (cookie + CSRF) |
+| DELETE | `/videos/:id`                  | Delete video + assets (cookie + CSRF)  |
+| POST   | `/videos/:id/signed-url`       | Generate signed URLs for streaming and thumbnails (cookie + CSRF) |
+| POST   | `/videos/:id/refresh-token`    | Refresh signed URL for extended playback (cookie + CSRF) |
+| GET    | `/videos/stream/:id`           | HLS master playlist (signed URL: expires, signature, uid) |
+| GET    | `/videos/stream/:id/:file?`    | HLS segments/playlists (signed URL: expires, signature, uid) |
+| GET    | `/videos/thumb/signed/:id`     | Static thumbnail WebP (signed URL: expires, signature, uid) |
+| GET    | `/videos/thumb/static/:id`     | Static thumbnail WebP (cookie)         |
+| GET    | `/videos/thumb/animated/:id`   | Animated thumbnail WebP (cookie)       |
+| GET    | `/videos/status/:id`           | Processing status (cookie)             |
+| GET    | `/videos/duration/:id`         | Video duration in seconds (cookie)     |
+| GET    | `/videos/download/:id`         | Original video download with HTTP 206 support (cookie) |
 
 
 - **Full Swagger (OpenAPI) available at:** `http://localhost:3070/api-docs`
