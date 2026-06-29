@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import  fs from "fs";
 import  path from "path";
 import { File } from "../models/data.model";
-import { VIDEO_PATH, makeMulterUploadMiddleware, uploadThumb, uploadVideoWithThumb } from "../server.settings";
+import { VIDEO_PATH, THUMB_MAX_BYTES, makeMulterUploadMiddleware, uploadThumb, uploadVideoWithThumb } from "../server.settings";
 import { verifyToken, AuthRequest, verifySignedUrl } from "../middleware/auth.middleware";
 import * as videoUtils from '../utils/videoUtils';
 import { generateSignedUrl } from '../utils/signedUrl';
@@ -10,9 +10,44 @@ import { ENABLE_LOGS } from '../config/env';
 import { updateVideoValidator, uploadVideoValidator, videoIdParamValidator } from '../validators/video.validators';
 import { validateRequest } from '../middleware/validateRequest.middleware';
 import { cleanupMulterFiles } from '../utils/cleanupUploads';
+import { csrfProtection } from '../middleware/csrf.middleware';
 
 type MulterFile = Express.Multer.File;
 
+async function serveThumbnail(id: string, userId: string, res: Response): Promise<void> {
+  const file = await File.findById(id);
+
+  if (!file || file.videoStatus !== "uploaded") {
+    res.status(404).json({ error: "Thumbnail not available" });
+    return;
+  }
+
+  if (file.userId.toString() !== userId) {
+    res.status(403).json({ error: "Not authorized to view this video" });
+    return;
+  }
+
+  const customThumbPath = path.join(VIDEO_PATH, id, `${id}_custom.webp`);
+  if (fs.existsSync(customThumbPath)) {
+    res.setHeader("Content-Type", "image/webp");
+    fs.createReadStream(customThumbPath).pipe(res);
+    return;
+  }
+
+  if (!file.static_thumbnail) {
+    res.status(500).json({ error: "Static thumbnail missing unexpectedly" });
+    return;
+  }
+
+  const defaultThumbPath = path.join(VIDEO_PATH, id, file.static_thumbnail);
+  if (fs.existsSync(defaultThumbPath)) {
+    res.setHeader("Content-Type", "image/webp");
+    fs.createReadStream(defaultThumbPath).pipe(res);
+    return;
+  }
+
+  res.status(404).json({ error: "Thumbnail file not found" });
+}
 
 const router = Router();
 
@@ -24,7 +59,14 @@ const router = Router();
  *     description: Upload one video with optional thumbnail. The video is processed asynchronously to generate HLS streams, static and animated thumbnails.
  *     tags: [Videos]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: X-CSRF-Token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: CSRF token obtained from GET /videos/csrf-token
  *     requestBody:
  *       required: true
  *       content:
@@ -105,14 +147,18 @@ const router = Router();
  *         description: No files received or insertion error
  *       401:
  *         description: Missing or invalid token
+ *       403:
+ *         description: Invalid or missing CSRF token
  *       413:
  *         description: File too large
  *       500:
  *         description: Error during upload
  */
+
 router.post(
   "/videos",
   verifyToken,
+  csrfProtection,
   makeMulterUploadMiddleware(
     uploadVideoWithThumb.fields([
       { name: 'videos', maxCount: 1 },
@@ -135,7 +181,7 @@ router.post(
     const videoFile = files.videos[0];
     const thumbnailFile = files.thumbnail?.[0];
 
-    if (thumbnailFile && thumbnailFile.size > 5 * 1024 * 1024) {
+    if (thumbnailFile && thumbnailFile.size > THUMB_MAX_BYTES) {
       cleanupMulterFiles(req);
       return res.status(413).json({ 
         error: "Thumbnail too large",
@@ -188,7 +234,7 @@ router.post(
  *     description: Replaces the automatic thumbnail with a custom one. The file is converted to WebP and processed in the background.
  *     tags: [Videos]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -237,6 +283,7 @@ router.post(
 router.patch(
   "/videos/thumb/custom/:id",
   verifyToken,
+  csrfProtection,
   videoIdParamValidator,
   validateRequest,
   makeMulterUploadMiddleware(uploadThumb.single("thumbnail")),
@@ -281,7 +328,6 @@ router.patch(
   }
 );
 
-
 /**
  * @swagger
  * /videos/{id}:
@@ -290,7 +336,7 @@ router.patch(
  *     description: Partially updates metadata of an existing video (title, description, tags, category). Only provided fields will be updated.
  *     tags: [Videos]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -391,6 +437,7 @@ router.patch(
 router.patch(
   "/videos/:id",
   verifyToken,
+  csrfProtection,
   updateVideoValidator,
   validateRequest,
   async (req: AuthRequest, res) => {
@@ -411,8 +458,8 @@ router.patch(
         return res.status(403).json({ error: "Not authorized to modify this video" });
       }
 
-      // Build updates object
-      const updates: any = {};
+      type VideoMeta = { title?: string; description?: string; category?: string; tags?: string[] };
+      const updates: VideoMeta = {};
       if (title !== undefined) updates.title = title;
       if (description !== undefined) updates.description = description;
       if (category !== undefined) updates.category = category;
@@ -432,7 +479,6 @@ router.patch(
     }
   }
 );
-
 
 /**
  * @swagger
@@ -703,40 +749,7 @@ router.get(
 router.get(
   "/videos/thumb/signed/:id",
   verifySignedUrl,
-  async (req: AuthRequest, res) => {
-    const id = req.params.id;
-    const userId = req.userId;
-    
-    const file = await File.findById(id);
-
-    if (!file || file.videoStatus !== "uploaded") {
-      return res.status(404).json({ error: "Thumbnail not available" });
-    }
-
-    // Check ownership
-    if (file.userId.toString() !== userId) {
-      return res.status(403).json({ error: "Not authorized to view this video" });
-    }
-
-    // Check custom thumbnail exists
-    const customThumbPath = path.join(VIDEO_PATH, id, `${id}_custom.webp`);
-    if (fs.existsSync(customThumbPath)) {
-      res.setHeader("Content-Type", "image/webp");
-      return fs.createReadStream(customThumbPath).pipe(res);
-    }
-
-    if (!file.static_thumbnail) {
-      return res.status(500).json({ error: "Static thumbnail missing unexpectedly" });
-    }
-
-    const defaultThumbPath = path.join(VIDEO_PATH, id, file.static_thumbnail);
-    if (fs.existsSync(defaultThumbPath)) {
-      res.setHeader("Content-Type", "image/webp");
-      return fs.createReadStream(defaultThumbPath).pipe(res);
-    }
-
-    return res.status(404).json({ error: "Thumbnail file not found" });
-  }
+  (req: AuthRequest, res) => serveThumbnail(req.params.id, req.userId!, res)
 );
 
 /**
@@ -747,7 +760,7 @@ router.get(
  *     description: Returns the static thumbnail in WebP format. Priority - 1) Custom thumbnail (if uploaded), 2) Automatically generated thumbnail
  *     tags: [Videos]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -796,42 +809,8 @@ router.get(
 router.get(
   "/videos/thumb/static/:id",
   verifyToken,
-  async (req: AuthRequest, res) => {
-    const id = req.params.id;
-    const userId = req.userId;
-    
-    const file = await File.findById(id);
-
-    if (!file || file.videoStatus !== "uploaded") {
-      return res.status(404).json({ error: "Thumbnail not available" });
-    }
-
-    // Check ownership
-    if (file.userId.toString() !== userId) {
-      return res.status(403).json({ error: "Not authorized to view this video" });
-    }
-
-    // Check custom thumbnail exists
-    const customThumbPath = path.join(VIDEO_PATH, id, `${id}_custom.webp`);
-    if (fs.existsSync(customThumbPath)) {
-      res.setHeader("Content-Type", "image/webp");
-      return fs.createReadStream(customThumbPath).pipe(res);
-    }
-
-    if (!file.static_thumbnail) {
-      return res.status(500).json({ error: "Static thumbnail missing unexpectedly" });
-    }
-
-    const defaultThumbPath = path.join(VIDEO_PATH, id, file.static_thumbnail);
-    if (fs.existsSync(defaultThumbPath)) {
-      res.setHeader("Content-Type", "image/webp");
-      return fs.createReadStream(defaultThumbPath).pipe(res);
-    }
-
-    return res.status(404).json({ error: "Thumbnail file not found" });
-  }
+  (req: AuthRequest, res) => serveThumbnail(req.params.id, req.userId!, res)
 );
-
 
 /**
  * @swagger
@@ -841,7 +820,7 @@ router.get(
  *     description: Returns the animated thumbnail in WebP format. Automatically generated during video processing (first 3 seconds at 10fps).
  *     tags: [Videos]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -921,8 +900,6 @@ router.get(
   }
 );
 
-
-
 /**
  * @swagger
  * /videos/download/{id}:
@@ -931,7 +908,7 @@ router.get(
  *     description: Download the video in original quality. Supports range requests (HTTP 206) for partial downloads and resume. The file name will be the video title.
  *     tags: [Videos]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -1092,8 +1069,6 @@ router.get(
   }
 );
 
-
-
 /**
  * @swagger
  * /videos/{id}:
@@ -1102,7 +1077,7 @@ router.get(
  *     description: Returns all information of a specific video, including metadata, HLS paths, thumbnails, and processing status.
  *     tags: [Videos]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -1263,7 +1238,6 @@ router.get(
   }
 );
 
-
 /**
  * @swagger
  * /videos/status/{id}:
@@ -1272,7 +1246,7 @@ router.get(
  *     description: Lightweight endpoint to check only the processing status of a video (processing, uploaded, error). Useful for polling during processing.
  *     tags: [Videos]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -1360,8 +1334,6 @@ router.get(
   }
 );
 
-
-
 /**
  * @swagger
  * /videos/duration/{id}:
@@ -1370,7 +1342,7 @@ router.get(
  *     description: Lightweight endpoint to get only the video duration in seconds. Useful to update the UI without fetching full video metadata.
  *     tags: [Videos]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -1440,7 +1412,6 @@ router.get(
   }
 );
 
-
 /**
  * @swagger
  * /videos:
@@ -1449,7 +1420,7 @@ router.get(
  *     description: Returns a list of all videos of the logged-in user with essential metadata (title, description, thumbnail, duration, tags, category). Videos are filtered by user and mimetype "video".
  *     tags: [Videos]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     responses:
  *       200:
  *         description: Successfully retrieved list of videos
@@ -1556,8 +1527,6 @@ router.get(
   }
 );
 
-
-
 /**
  * @swagger
  * /videos/{id}:
@@ -1566,7 +1535,7 @@ router.get(
  *     description: Completely deletes a video from the database and all associated files (original video, HLS, thumbnails). File deletion runs in the background with retry logic to handle files in use.
  *     tags: [Videos]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -1624,6 +1593,7 @@ router.get(
 router.delete(
   "/videos/:id",
   verifyToken,
+  csrfProtection,
   async (req: AuthRequest, res) => {
     const { id } = req.params;
     const userId = req.userId;
@@ -1707,7 +1677,7 @@ router.delete(
  *     description: Creates temporary signed URLs (valid for 10 minutes) for HLS video streaming and thumbnail access. The signed URLs use HMAC-SHA256 signatures to prevent unauthorized access and replay attacks. Used by the video player component to securely stream content.
  *     tags: [Videos]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -1790,6 +1760,7 @@ router.delete(
 router.post(
   "/videos/:id/signed-url",
   verifyToken,
+  csrfProtection,
   videoIdParamValidator,
   validateRequest,
   async (req: AuthRequest, res) => {
@@ -1814,7 +1785,8 @@ router.post(
 
       // Generate signed URLs
       const signedParams = generateSignedUrl({ videoId, userId, expiresInMinutes: 15 });
-      
+      const expiresAt = Number(new URLSearchParams(signedParams.slice(1)).get('expires'));
+
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       const streamUrl = `${baseUrl}/videos/stream/${videoId}/${fileData.hls}${signedParams}`;
       const thumbnailUrl = `${baseUrl}/videos/thumb/signed/${videoId}${signedParams}`;
@@ -1822,7 +1794,7 @@ router.post(
       res.json({
         streamUrl,
         thumbnailUrl,
-        expiresAt: Date.now() + (10 * 60 * 1000)
+        expiresAt,
       });
     } catch (error) {
       res.status(500).json({ error: "Error generating signed URL" });
@@ -1838,7 +1810,7 @@ router.post(
  *     description: Generates a new signed URL token valid for 15 minutes to extend streaming session without interruption. Requires JWT authentication and ownership verification.
  *     tags: [Videos]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -1895,6 +1867,7 @@ router.post(
 router.post(
   "/videos/:id/refresh-token",
   verifyToken,
+  csrfProtection,
   videoIdParamValidator,
   validateRequest,
   async (req: AuthRequest, res) => {
