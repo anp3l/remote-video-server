@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import sharp from "sharp";
 import config from "config";
-import { File } from "../models/data.model";
+import { File, IFile } from "../models/data.model";
 import { VIDEO_PATH } from "../server.settings";
 import { ENABLE_LOGS } from "../config/env";
 
@@ -274,20 +274,17 @@ export const createVideo = async (fileObj, customThumbnailPath?: string) => {
 
     // Update the database if the video still exists
     if (folderExistsOrExit() && await File.exists({ _id: id })) {
-      const updateData: any = {
+      const updateData: Partial<IFile> = {
         hls: `${id}_master.m3u8`,
-        static_thumbnail: `${id}.webp`,
         animated_thumbnail: `${id}_animated.webp`,
-         original_video: `${id}_original${path.extname(fileObj.filename)}`,
+        original_video: `${id}_original${path.extname(fileObj.filename)}`,
         duration: duration,
         videoStatus: "uploaded",
+        ...(customThumbnailPath
+          ? { custom_thumbnail: `${id}_custom.webp` }
+          : { static_thumbnail: `${id}.webp` }),
       };
-      
-      // Add custom thumbnail if it exists
-      if (customThumbnailPath) {
-        updateData.custom_thumbnail = `${id}_custom.webp`;
-      }
-      
+
       await File.findByIdAndUpdate(id, updateData);
       if (ENABLE_LOGS) console.log(`[createVideo] Video ${id} successfully processed.`);
     }
