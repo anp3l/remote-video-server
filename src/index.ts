@@ -3,13 +3,13 @@ import { PORT, NODE_ENV, ALLOWED_ORIGINS } from './config/env';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import path from 'path';
 import config from 'config';
 import mongoConnection from './mongo-connection';
 import videoRoutes from './routes/video.routes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsDoc from 'swagger-jsdoc';
 import { version } from '../package.json';
+import { generateCsrfToken } from './middleware/csrf.middleware';
 
 const app = express();
 
@@ -97,8 +97,6 @@ app.use(cors({
 app.use(cookieParser()); // Parse cookies from requests
 app.use(express.json());
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
 // === SWAGGER UI ===
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
   explorer: true,
@@ -113,6 +111,12 @@ mongoConnection.then(() => {
 });
 
 // === ROUTES ===
+
+app.get('/videos/csrf-token', (req, res) => {
+  const csrfToken = generateCsrfToken(req, res);
+  res.json({ csrfToken });
+});
+
 app.use(videoRoutes);
 
 // === HEALTH CHECK ===
@@ -126,15 +130,18 @@ app.get('/health', (req, res) => {
 });
 
 // === GLOBAL ERROR HANDLER ===
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('=== GLOBAL ERROR HANDLER ===');
-  console.error('URL:', req.method, req.url);
-  console.error('Error:', err);
-  console.error('Message:', err.message);
-  console.error('Stack:', err.stack);
-  console.error('============================');
-  
-  res.status(err.status || 500).json({
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const status = err.status || err.statusCode || 500;
+  if (status < 500) {
+    console.warn(`[${status}] ${err.message}`);
+  } else {
+    console.error('=== GLOBAL ERROR HANDLER ===');
+    console.error('Error:', err.message);
+    console.error('Stack:', err.stack);
+    console.error('============================');
+  }
+
+  res.status(status).json({
     error: err.message || 'Internal Server Error',
     details: NODE_ENV === 'development' ? err.stack : undefined
   });
