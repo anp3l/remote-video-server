@@ -1,19 +1,22 @@
 import * as videoUtils from './utils/videoUtils';
 import multer from 'multer';
+import { Request, Response, NextFunction } from 'express';
 
 
 export const VIDEO_PATH = "uploads/videos";
 
+export const THUMB_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+
 export const uploadVideo = multer({
   dest: `${VIDEO_PATH}/`,
   fileFilter: videoUtils.videoFileFilter,
-  limits: { fileSize: 500 * 1024 * 1024 }, // limit up to 100 mb
+  limits: { fileSize: 500 * 1024 * 1024 },
 });
 
 export const uploadThumb = multer({
   dest: `${VIDEO_PATH}/`,
   fileFilter: videoUtils.thumbFileFilter,
-  limits: { fileSize: 500 * 1024 * 1024 }, // limit up to 5 mb
+  limits: { fileSize: THUMB_MAX_BYTES },
 })
 
 export const uploadVideoWithThumb = multer({
@@ -30,8 +33,10 @@ export const uploadVideoWithThumb = multer({
   limits: { fileSize: 500 * 1024 * 1024 },
 });
 
-export function makeMulterUploadMiddleware(multerUploadFunction) {
-  return (req: any, res: any, next) => {
+type MulterHandler = (req: Request, res: Response, next: NextFunction) => void;
+
+export function makeMulterUploadMiddleware(multerUploadFunction: MulterHandler): MulterHandler {
+  return (req: Request, res: Response, next: NextFunction) => {
     
     multerUploadFunction(req, res, (err) => {
       // handle Multer error
